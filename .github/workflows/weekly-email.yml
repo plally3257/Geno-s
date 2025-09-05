@@ -1,0 +1,55 @@
+name: Fantasy Weekly Email
+
+on:
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "NFL/Fantasy Week number"
+        required: true
+        default: "1"
+      mode:
+        description: "'draft' to create Gmail draft, 'send' to send"
+        required: true
+        default: "draft"
+  schedule:
+    # Every Monday 9:00 AM America/Denver ≈ 15:00 UTC (adjust if you like)
+    - cron: "0 15 * * 1"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
+      ESPN_S2: ${{ secrets.ESPN_S2 }}
+      SWID: ${{ secrets.SWID }}
+      FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+      GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+      GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+      GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+      RECIPIENTS: ${{ secrets.RECIPIENTS }} # optional; comma-separated
+      WEEK: ${{ inputs.week }}
+      SEND_MODE: ${{ inputs.mode }}
+      # SEASON: "2025"  # Optional override
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Compose email from ESPN
+        run: python compose_email.py
+
+      - name: Create Draft or Send
+        run: python gmail_send.py
+
+      - name: Upload artifacts (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-preview
+          path: out/
