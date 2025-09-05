@@ -12,7 +12,7 @@ on:
         required: true
         default: "draft"
   schedule:
-    # Every Monday 9:00 AM America/Denver ≈ 15:00 UTC (adjust if you like)
+    # Mondays 9:00 AM America/Denver ≈ 15:00 UTC (adjust if you like)
     - cron: "0 15 * * 1"
 
 jobs:
