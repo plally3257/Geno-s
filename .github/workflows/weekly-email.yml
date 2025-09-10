@@ -52,11 +52,27 @@ jobs:
           echo "GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN && 'present' || 'MISSING' }}"
           echo "RECIPIENTS=${{ secrets.RECIPIENTS && 'present' || 'empty (ok)'}}"
 
-      - name: Compose email from ESPN
-        run: python compose_email.py
+     - name: ESPN connectivity check (no secrets printed)
+        run: |
+          URL="https://fantasy.espn.com/apis/v3/games/ffl/seasons/${{ env.SEASON || '2025' }}/segments/0/leagues/${{ secrets.LEAGUE_ID }}?view=mMatchupScore&scoringPeriodId=${{ inputs.week }}"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --cookie "espn_s2=${{ secrets.ESPN_S2 }}; SWID=${{ secrets.SWID }}" \
+            "$URL")
+          echo "HTTP status: $CODE"
+          if [ "$CODE" -ge 400 ]; then
+            echo "::error ::ESPN returned HTTP $CODE. Your ESPN_S2/SWID may be expired or wrong (SWID must include {})."
+            exit 1
+          fi
 
-      - name: Create Draft or Send
-        run: python gmail_send.py
+      - name: Compose email from ESPN (show full traceback)
+        run: |
+          set -e
+          python -X dev -u compose_email.py
+
+      - name: Create Draft or Send (show full traceback)
+        run: |
+          set -e
+          python -X dev -u gmail_send.py
 
       - name: Upload artifacts (debug)
         if: ${{ hashFiles('out/**') != '' }}
