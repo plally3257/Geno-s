@@ -17,9 +17,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    steps:
-      - name: Say hello
-        run: echo "Dispatch works. week=${{ inputs.week }}, mode=${{ inputs.mode }}"
+
     env:
       LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
       ESPN_S2: ${{ secrets.ESPN_S2 }}
@@ -31,11 +29,9 @@ jobs:
       RECIPIENTS: ${{ secrets.RECIPIENTS }}
       WEEK: ${{ inputs.week }}
       SEND_MODE: ${{ inputs.mode }}
-      SEASON: "2025"  # <— add this for now so season is explicit
+      SEASON: "2025"
 
     steps:
-      - name: Hello from GitHub Actions
-        run: echo "Workflow dispatch is working. week=${{ inputs.week }} mode=${{ inputs.mode }}"
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
@@ -56,10 +52,12 @@ jobs:
           echo "GMAIL_CLIENT_SECRET=${{ secrets.GMAIL_CLIENT_SECRET && 'present' || 'MISSING' }}"
           echo "GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN && 'present' || 'MISSING' }}"
           echo "RECIPIENTS=${{ secrets.RECIPIENTS && 'present' || 'empty (ok)'}}"
+          echo "WEEK=${{ inputs.week }}"
+          echo "MODE=${{ inputs.mode }}"
 
-     - name: ESPN connectivity check (no secrets printed)
+      - name: ESPN connectivity check (no secrets printed)
         run: |
-          URL="https://fantasy.espn.com/apis/v3/games/ffl/seasons/${{ env.SEASON || '2025' }}/segments/0/leagues/${{ secrets.LEAGUE_ID }}?view=mMatchupScore&scoringPeriodId=${{ inputs.week }}"
+          URL="https://fantasy.espn.com/apis/v3/games/ffl/seasons/${{ env.SEASON }}/segments/0/leagues/${{ secrets.LEAGUE_ID }}?view=mMatchupScore&scoringPeriodId=${{ inputs.week }}"
           CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             --cookie "espn_s2=${{ secrets.ESPN_S2 }}; SWID=${{ secrets.SWID }}" \
             "$URL")
