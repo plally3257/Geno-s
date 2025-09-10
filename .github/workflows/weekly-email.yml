@@ -34,12 +34,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: List files for debugging
+        run: |
+          echo "Current directory:" 
+          pwd
+          echo "Top-level files:"
+          ls -la
+          echo "----"
+          echo "Show files up to 3 levels deep:"
+          find . -maxdepth 3 -type f | sort
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
-        run: pip install -r requirements.txt
+      - name: Install deps (auto-detect requirements.txt)
+        run: |
+          if [ -f requirements.txt ]; then
+            echo "Installing from root requirements.txt"
+            pip install -r requirements.txt
+          elif [ -f .github/workflows/requirements.txt ]; then
+            echo "Installing from .github/workflows/requirements.txt"
+            pip install -r .github/workflows/requirements.txt
+          else
+            echo "::error ::No requirements.txt found in repo root or .github/workflows/"
+            exit 1
+          fi
 
       - name: Preflight – check env and Python
         run: |
@@ -67,15 +87,19 @@ jobs:
             exit 1
           fi
 
+      # 👉 Adjust the paths below depending on where your .py files are:
+      # If they live at the repo root, leave as-is.
+      # If they live in .github/workflows/, prefix with ".github/workflows/"
+
       - name: Compose email from ESPN (show full traceback)
-        run: python compose_email.py
+        run: |
           set -e
-          python -X dev -u compose_email.py
+          python compose_email.py
 
       - name: Create Draft or Send (show full traceback)
-        run: python gmail_send.py|
+        run: |
           set -e
-          python -X dev -u gmail_send.py
+          python gmail_send.py
 
       - name: Upload artifacts (debug)
         if: ${{ hashFiles('out/**') != '' }}
