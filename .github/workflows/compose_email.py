@@ -22,10 +22,10 @@ HEADERS = {
     "Origin": "https://fantasy.espn.com",
     "Referer": f"https://fantasy.espn.com/football/league?leagueId={LEAGUE_ID}",
     "Connection": "keep-alive",
-    # Extra headers some ESPN edges expect:
     "x-fantasy-source": "kona",
     "x-fantasy-platform": "kona-PROD",
 }
+
 def _try_fetch(session, url, params, cookies):
     r = session.get(url, params=params, cookies=cookies, timeout=30)
     ct = r.headers.get("Content-Type", "").lower()
@@ -34,7 +34,7 @@ def _try_fetch(session, url, params, cookies):
         snippet = (r.text or "")[:300].replace("\n", " ")
         print(f"[WARN] Non-JSON response snippet: {snippet}", file=sys.stderr)
     return r
-    
+
 def espn_get_scoreboard(league_id, season, week):
     cookies = {"espn_s2": ESPN_S2, "SWID": SWID}
     params = {"view": "mMatchupScore", "scoringPeriodId": str(week)}
@@ -54,7 +54,7 @@ def espn_get_scoreboard(league_id, season, week):
             if r.status_code == 200 and r.headers.get("Content-Type","").lower().startswith("application/json"):
                 data = r.json()
 
-                # If teams are missing (common on some hosts), fetch mTeam and merge
+                # If teams missing, fetch mTeam and merge
                 if "teams" not in data:
                     print("[INFO] 'teams' missing; fetching mTeam view…")
                     r2 = _try_fetch(s, host, {"view": "mTeam"}, cookies)
@@ -64,7 +64,7 @@ def espn_get_scoreboard(league_id, season, week):
                     else:
                         print("[WARN] Could not fetch mTeam; proceeding without names.", file=sys.stderr)
 
-                # Ensure schedule present (should be, but be safe)
+                # Ensure schedule present
                 if "schedule" not in data:
                     print("[INFO] 'schedule' missing; refetching mMatchupScore…")
                     r3 = _try_fetch(s, host, {"view": "mMatchupScore", "scoringPeriodId": str(week)}, cookies)
@@ -83,25 +83,26 @@ def espn_get_scoreboard(league_id, season, week):
 
     fail("ESPN kept returning non-JSON or blocked responses. Refresh ESPN_S2 and SWID (keep braces {}) and try again.")
 
-
-
 def summarize_matchups(data, week):
     teams_raw = data.get("teams", [])
-teams = {
-    t.get("id"): f"{t.get('location','Team')} {t.get('nickname','')}".strip()
-    for t in teams_raw
-    if t.get("id") is not None
-}
+    teams = {
+        t.get("id"): f"{t.get('location','Team')} {t.get('nickname','')}".strip()
+        for t in teams_raw
+        if t.get("id") is not None
+    }
+
     out = []
-    for m in data["schedule"]:
-        if m.get("matchupPeriodId") != int(week): continue
-        if "away" not in m or "home" not in m: continue
+    for m in data.get("schedule", []):
+        if m.get("matchupPeriodId") != int(week):
+            continue
+        if "away" not in m or "home" not in m:
+            continue
         home = teams.get(m["home"]["teamId"], f"Team {m['home']['teamId']}")
         away = teams.get(m["away"]["teamId"], f"Team {m['away']['teamId']}")
         hs = m["home"].get("totalPoints", 0)
         as_ = m["away"].get("totalPoints", 0)
         status = m.get("winner", "UNDECIDED")
-        out.append({"home":home, "away":away, "home_pts":hs, "away_pts":as_, "status":status})
+        out.append({"home": home, "away": away, "home_pts": hs, "away_pts": as_, "status": status})
     return out
 
 HTML_TMPL = Template("""
