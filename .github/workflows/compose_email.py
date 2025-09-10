@@ -51,23 +51,47 @@ def espn_get_scoreboard(league_id, season, week):
         print(f"[INFO] Trying host: {host}")
         for i in range(3):
             r = _try_fetch(s, host, params, cookies)
-            if r.status_code == 200:
-                if r.headers.get("Content-Type", "").lower().startswith("application/json"):
-                    return r.json()
-                # got HTML/login; soft-retry
-                time.sleep(1 + i)
-                continue
-            if r.status_code in (403, 429):
+            if r.status_code == 200 and r.headers.get("Content-Type","").lower().startswith("application/json"):
+                data = r.json()
+
+                # If teams are missing (common on some hosts), fetch mTeam and merge
+                if "teams" not in data:
+                    print("[INFO] 'teams' missing; fetching mTeam view…")
+                    r2 = _try_fetch(s, host, {"view": "mTeam"}, cookies)
+                    if r2.status_code == 200 and r2.headers.get("Content-Type","").lower().startswith("application/json"):
+                        data2 = r2.json()
+                        data["teams"] = data2.get("teams", [])
+                    else:
+                        print("[WARN] Could not fetch mTeam; proceeding without names.", file=sys.stderr)
+
+                # Ensure schedule present (should be, but be safe)
+                if "schedule" not in data:
+                    print("[INFO] 'schedule' missing; refetching mMatchupScore…")
+                    r3 = _try_fetch(s, host, {"view": "mMatchupScore", "scoringPeriodId": str(week)}, cookies)
+                    if r3.status_code == 200 and r3.headers.get("Content-Type","").lower().startswith("application/json"):
+                        data3 = r3.json()
+                        data["schedule"] = data3.get("schedule", data.get("schedule", []))
+
+                return data
+
+            if r.status_code in (403, 429) or not r.headers.get("Content-Type","").lower().startswith("application/json"):
                 time.sleep(2 + i)
                 continue
+
             print(f"[ERROR] ESPN HTTP {r.status_code}: {(r.text or '')[:300]}", file=sys.stderr)
             r.raise_for_status()
 
     fail("ESPN kept returning non-JSON or blocked responses. Refresh ESPN_S2 and SWID (keep braces {}) and try again.")
 
 
+
 def summarize_matchups(data, week):
-    teams = {t["id"]: t["location"] + " " + t["nickname"] for t in data["teams"]}
+    teams_raw = data.get("teams", [])
+teams = {
+    t.get("id"): f"{t.get('location','Team')} {t.get('nickname','')}".strip()
+    for t in teams_raw
+    if t.get("id") is not None
+}
     out = []
     for m in data["schedule"]:
         if m.get("matchupPeriodId") != int(week): continue
