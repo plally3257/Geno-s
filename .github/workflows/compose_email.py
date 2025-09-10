@@ -1,11 +1,16 @@
 import os, requests, datetime, sys, time
 from jinja2 import Template
 
+# ---------------------------
+# Utilities & configuration
+# ---------------------------
+
 def fail(msg):
     print(f"[ERROR] {msg}", file=sys.stderr)
     sys.exit(1)
 
-for req in ["LEAGUE_ID","ESPN_S2","SWID"]:
+# Required env vars
+for req in ["LEAGUE_ID", "ESPN_S2", "SWID"]:
     if not os.environ.get(req):
         fail(f"Missing env var {req}. Add it under GitHub Secrets.")
 
@@ -22,6 +27,7 @@ HEADERS = {
     "Origin": "https://fantasy.espn.com",
     "Referer": f"https://fantasy.espn.com/football/league?leagueId={LEAGUE_ID}",
     "Connection": "keep-alive",
+    # Extra headers some ESPN edges expect:
     "x-fantasy-source": "kona",
     "x-fantasy-platform": "kona-PROD",
 }
@@ -34,6 +40,10 @@ def _try_fetch(session, url, params, cookies):
         snippet = (r.text or "")[:300].replace("\n", " ")
         print(f"[WARN] Non-JSON response snippet: {snippet}", file=sys.stderr)
     return r
+
+# ---------------------------
+# ESPN data fetching
+# ---------------------------
 
 def espn_get_scoreboard(league_id, season, week):
     cookies = {"espn_s2": ESPN_S2, "SWID": SWID}
@@ -51,30 +61,30 @@ def espn_get_scoreboard(league_id, season, week):
         print(f"[INFO] Trying host: {host}")
         for i in range(3):
             r = _try_fetch(s, host, params, cookies)
-            if r.status_code == 200 and r.headers.get("Content-Type","").lower().startswith("application/json"):
+            if r.status_code == 200 and r.headers.get("Content-Type", "").lower().startswith("application/json"):
                 data = r.json()
 
                 # If teams missing, fetch mTeam and merge
-                if "teams" not in data:
+                if "teams" not in data or not data.get("teams"):
                     print("[INFO] 'teams' missing; fetching mTeam view…")
                     r2 = _try_fetch(s, host, {"view": "mTeam"}, cookies)
-                    if r2.status_code == 200 and r2.headers.get("Content-Type","").lower().startswith("application/json"):
+                    if r2.status_code == 200 and r2.headers.get("Content-Type", "").lower().startswith("application/json"):
                         data2 = r2.json()
                         data["teams"] = data2.get("teams", [])
                     else:
                         print("[WARN] Could not fetch mTeam; proceeding without names.", file=sys.stderr)
 
                 # Ensure schedule present
-                if "schedule" not in data:
+                if "schedule" not in data or not data.get("schedule"):
                     print("[INFO] 'schedule' missing; refetching mMatchupScore…")
                     r3 = _try_fetch(s, host, {"view": "mMatchupScore", "scoringPeriodId": str(week)}, cookies)
-                    if r3.status_code == 200 and r3.headers.get("Content-Type","").lower().startswith("application/json"):
+                    if r3.status_code == 200 and r3.headers.get("Content-Type", "").lower().startswith("application/json"):
                         data3 = r3.json()
                         data["schedule"] = data3.get("schedule", data.get("schedule", []))
 
                 return data
 
-            if r.status_code in (403, 429) or not r.headers.get("Content-Type","").lower().startswith("application/json"):
+            if r.status_code in (403, 429) or not r.headers.get("Content-Type", "").lower().startswith("application/json"):
                 time.sleep(2 + i)
                 continue
 
@@ -83,13 +93,34 @@ def espn_get_scoreboard(league_id, season, week):
 
     fail("ESPN kept returning non-JSON or blocked responses. Refresh ESPN_S2 and SWID (keep braces {}) and try again.")
 
+# ---------------------------
+# Transformations
+# ---------------------------
+
 def summarize_matchups(data, week):
-    teams_raw = data.get("teams", [])
-    teams = {
-        t.get("id"): f"{t.get('location','Team')} {t.get('nickname','')}".strip()
-        for t in teams_raw
-        if t.get("id") is not None
-    }
+    teams_raw = data.get("teams", []) or []
+
+    def team_name(t: dict) -> str:
+        loc = (t.get("location") or "").strip()
+        nick = (t.get("nickname") or "").strip()
+        nm = (t.get("name") or "").strip()
+        abbr = (t.get("abbrev") or "").strip()
+        tid = t.get("id")
+        if loc or nick:
+            return f"{loc} {nick}".strip()
+        if nm:
+            return nm
+        if abbr:
+            return abbr
+        return f"Team {tid}" if tid is not None else "Team"
+
+    teams = {}
+    for t in teams_raw:
+        tid = t.get("id")
+        if tid is not None:
+            teams[tid] = team_name(t)
+
+    print(f"[INFO] Built team name map for {len(teams)} teams")
 
     matchups = []
     for m in data.get("schedule", []):
@@ -103,7 +134,7 @@ def summarize_matchups(data, week):
         home_pts = float(m["home"].get("totalPoints", 0) or 0)
         away_pts = float(m["away"].get("totalPoints", 0) or 0)
 
-        # ESPN sets winner to "HOME"/"AWAY"/"TIE"/"UNDECIDED"
+        # Determine winner
         winner_flag = (m.get("winner") or "UNDECIDED").upper()
         if winner_flag == "HOME" and home_pts != away_pts:
             winner = "home"
@@ -129,6 +160,67 @@ def summarize_matchups(data, week):
 
     return matchups
 
+def extract_standings(data):
+    """
+    Best-effort standings table if the teams payload includes record info.
+    Returns list of dicts: {name, wins, losses, ties, points_for}
+    """
+    rows = []
+    for t in data.get("teams", []):
+        name = f"{t.get('location','Team')} {t.get('nickname','')}".strip() or t.get("name") or t.get("abbrev") or "Team"
+        rec = (t.get("record") or {}).get("overall") or {}
+        wins = rec.get("wins")
+        losses = rec.get("losses")
+        ties = rec.get("ties")
+        pf = t.get("points", {}).get("scored") or t.get("valuesByStat", {}).get("0")  # stat 0 often points
+        if wins is not None and losses is not None:
+            rows.append({
+                "name": name,
+                "wins": int(wins),
+                "losses": int(losses),
+                "ties": int(ties or 0),
+                "points_for": round(float(pf or 0), 2),
+            })
+    rows.sort(key=lambda r: (r["wins"], r["points_for"]), reverse=True)
+    return rows
+
+def build_narrative(matchups, week):
+    if not matchups:
+        return f"No results yet for Week {week}."
+
+    closest = min(matchups, key=lambda m: m["margin"])
+    blowout = max(matchups, key=lambda m: m["margin"])
+    lowest = min(matchups, key=lambda m: min(m["home_pts"], m["away_pts"]))
+
+    lines = []
+    lines.append(f"Week {week} is in the books!")
+
+    # Closest game
+    lines.append(
+        f" The closest battle was between {closest['away']} and {closest['home']}, "
+        f"decided by just {closest['margin']} points."
+    )
+
+    # Biggest blowout
+    lines.append(
+        f" Meanwhile, {blowout['home']} vs {blowout['away']} was a blowout "
+        f"with a margin of {blowout['margin']}."
+    )
+
+    # Lowest score smack talk
+    loser_team = lowest["home"] if lowest["home_pts"] < lowest["away_pts"] else lowest["away"]
+    loser_score = min(lowest["home_pts"], lowest["away_pts"])
+    lines.append(
+        f" And let’s not forget: {loser_team} posted a week-low {loser_score} points. "
+        f"Maybe try setting a lineup next time? 😉"
+    )
+
+    return " ".join(lines)
+
+# ---------------------------
+# HTML template
+# ---------------------------
+
 HTML_TMPL = Template("""
 <!doctype html>
 <html>
@@ -145,28 +237,33 @@ HTML_TMPL = Template("""
               </td>
             </tr>
 
+            <!-- Narrative -->
+            <tr>
+              <td style="padding:20px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Weekly Recap</div>
+                <div style="font-size:14px; color:#334155; line-height:1.5;">
+                  {{ narrative }}
+                </div>
+              </td>
+            </tr>
+
             <!-- Matchups -->
             <tr>
-              <td style="padding:20px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Matchups & Results</div>
-
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate; border-spacing:0 10px;">
                   {% for m in matchups %}
                   <tr>
                     <td style="background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
                       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                         <tr>
-                          <td style="width:40%; font-size:14px; color:#0f172a; {% if m.winner=='away' %}font-weight:700{% endif %}">
-                            {{ m.away }}
-                          </td>
+                          <td style="width:40%; font-size:14px; color:#0f172a; {% if m.winner=='away' %}font-weight:700{% endif %}">{{ m.away }}</td>
                           <td style="width:20%; text-align:center; font-size:14px; color:#334155;">
                             <span style="display:inline-block; background:#eef2ff; color:#3730a3; border-radius:999px; padding:3px 10px; font-size:12px;">
                               {{ m.away_pts }} — {{ m.home_pts }}
                             </span>
                           </td>
-                          <td style="width:40%; font-size:14px; color:#0f172a; text-align:right; {% if m.winner=='home' %}font-weight:700{% endif %}">
-                            {{ m.home }}
-                          </td>
+                          <td style="width:40%; font-size:14px; color:#0f172a; text-align:right; {% if m.winner=='home' %}font-weight:700{% endif %}">{{ m.home }}</td>
                         </tr>
                         <tr>
                           <td colspan="3" style="padding-top:6px; font-size:12px; color:#64748b; text-align:center;">
@@ -186,7 +283,6 @@ HTML_TMPL = Template("""
                   </tr>
                   {% endfor %}
                 </table>
-
                 {% if matchups|length == 0 %}
                   <div style="font-size:13px; color:#64748b; padding:6px 0 12px;">No matchups found for this week yet.</div>
                 {% endif %}
@@ -236,7 +332,9 @@ HTML_TMPL = Template("""
 </html>
 """.strip())
 
-SUBJECT_TMPL = Template("Fantasy Week {{ week }} Results & Notes")
+# ---------------------------
+# Main
+# ---------------------------
 
 def main():
     today = datetime.date.today()
@@ -245,15 +343,26 @@ def main():
 
     data = espn_get_scoreboard(LEAGUE_ID, season, week)
     matchups = summarize_matchups(data, week)
+    standings = extract_standings(data)
+    narrative = build_narrative(matchups, week)
 
     if not matchups:
         print("[WARN] No matchups found for that week/season.", file=sys.stderr)
 
+    html = HTML_TMPL.render(
+        week=week,
+        matchups=matchups,
+        standings=standings,
+        narrative=narrative,
+        now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    )
+    subject = f"Fantasy Week {week} Results & Notes"
+
     os.makedirs("out", exist_ok=True)
     with open("out/body.html", "w", encoding="utf-8") as f:
-        f.write(HTML_TMPL.render(week=week, matchups=matchups, now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")))
+        f.write(html)
     with open("out/subject.txt", "w", encoding="utf-8") as f:
-        f.write(SUBJECT_TMPL.render(week=week))
+        f.write(subject)
     print("[INFO] Wrote out/body.html and out/subject.txt")
 
 if __name__ == "__main__":
