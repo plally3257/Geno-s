@@ -68,12 +68,12 @@ jobs:
           fi
 
       - name: Compose email from ESPN (show full traceback)
-        run: |
+        run: python compose_email.py
           set -e
           python -X dev -u compose_email.py
 
       - name: Create Draft or Send (show full traceback)
-        run: |
+        run: python gmail_send.py|
           set -e
           python -X dev -u gmail_send.py
 
