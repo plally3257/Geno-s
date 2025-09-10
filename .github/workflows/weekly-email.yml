@@ -92,14 +92,11 @@ jobs:
       # If they live in .github/workflows/, prefix with ".github/workflows/"
 
       - name: Compose email from ESPN (show full traceback)
-        run: |
-          set -e
-          python compose_email.py
+        run: python .github/workflows/compose_email.py
 
       - name: Create Draft or Send (show full traceback)
-        run: |
-          set -e
-          python gmail_send.py
+        run: python .github/workflows/gmail_send.py
+          
 
       - name: Upload artifacts (debug)
         if: ${{ hashFiles('out/**') != '' }}
