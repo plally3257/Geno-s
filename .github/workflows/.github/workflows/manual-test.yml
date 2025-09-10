@@ -1,0 +1,20 @@
+name: Test Dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "NFL/Fantasy Week number"
+        required: true
+        default: "1"
+      mode:
+        description: "'draft' to create Gmail draft, 'send' to send"
+        required: true
+        default: "draft"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say hello
+        run: echo "Hello! week=${{ inputs.week }}, mode=${{ inputs.mode }}"
