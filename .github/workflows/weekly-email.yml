@@ -12,8 +12,7 @@ on:
         required: true
         default: "draft"
   schedule:
-    # Mondays 9:00 AM America/Denver ≈ 15:00 UTC (adjust if you like)
-    - cron: "0 15 * * 1"
+    - cron: "0 15 * * 1"  # Mondays ~9am America/Denver (MDT)
 
 jobs:
   run:
@@ -26,10 +25,10 @@ jobs:
       GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
       GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
       GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
-      RECIPIENTS: ${{ secrets.RECIPIENTS }} # optional; comma-separated
+      RECIPIENTS: ${{ secrets.RECIPIENTS }}
       WEEK: ${{ inputs.week }}
       SEND_MODE: ${{ inputs.mode }}
-      # SEASON: "2025"  # Optional override
+      SEASON: "2025"  # <— add this for now so season is explicit
 
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +40,18 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
+      - name: Preflight – check env and Python
+        run: |
+          python --version
+          echo "LEAGUE_ID=${{ secrets.LEAGUE_ID && 'present' || 'MISSING' }}"
+          echo "ESPN_S2=${{ secrets.ESPN_S2 && 'present' || 'MISSING' }}"
+          echo "SWID=${{ secrets.SWID && 'present' || 'MISSING (include curly braces {})' }}"
+          echo "FROM_EMAIL=${{ secrets.FROM_EMAIL && 'present' || 'MISSING' }}"
+          echo "GMAIL_CLIENT_ID=${{ secrets.GMAIL_CLIENT_ID && 'present' || 'MISSING' }}"
+          echo "GMAIL_CLIENT_SECRET=${{ secrets.GMAIL_CLIENT_SECRET && 'present' || 'MISSING' }}"
+          echo "GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN && 'present' || 'MISSING' }}"
+          echo "RECIPIENTS=${{ secrets.RECIPIENTS && 'present' || 'empty (ok)'}}"
+
       - name: Compose email from ESPN
         run: python compose_email.py
 
@@ -48,7 +59,7 @@ jobs:
         run: python gmail_send.py
 
       - name: Upload artifacts (debug)
-        if: always()
+        if: ${{ hashFiles('out/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: email-preview
