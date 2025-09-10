@@ -17,6 +17,9 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    steps:
+      - name: Say hello
+        run: echo "Dispatch works. week=${{ inputs.week }}, mode=${{ inputs.mode }}"
     env:
       LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
       ESPN_S2: ${{ secrets.ESPN_S2 }}
