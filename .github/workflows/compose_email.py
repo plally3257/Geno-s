@@ -16,40 +16,55 @@ ESPN_S2 = os.environ["ESPN_S2"]
 SWID = os.environ["SWID"]
 
 HEADERS = {
-    # Make this look like a normal Chrome request
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
     "Origin": "https://fantasy.espn.com",
     "Referer": f"https://fantasy.espn.com/football/league?leagueId={LEAGUE_ID}",
     "Connection": "keep-alive",
+    # Extra headers some ESPN edges expect:
+    "x-fantasy-source": "kona",
+    "x-fantasy-platform": "kona-PROD",
 }
-
+def _try_fetch(session, url, params, cookies):
+    r = session.get(url, params=params, cookies=cookies, timeout=30)
+    ct = r.headers.get("Content-Type", "").lower()
+    print(f"[INFO] HTTP {r.status_code}  content-type={ct}  url={r.url}")
+    if "application/json" not in ct:
+        snippet = (r.text or "")[:300].replace("\n", " ")
+        print(f"[WARN] Non-JSON response snippet: {snippet}", file=sys.stderr)
+    return r
+    
 def espn_get_scoreboard(league_id, season, week):
     cookies = {"espn_s2": ESPN_S2, "SWID": SWID}
-    url = f"https://fantasy.espn.com/apis/v3/games/ffl/seasons/{season}/segments/0/leagues/{league_id}"
     params = {"view": "mMatchupScore", "scoringPeriodId": str(week)}
-    print(f"[INFO] GET {url}  params={params}")
 
     s = requests.Session()
     s.headers.update(HEADERS)
 
-    # retry a few times in case CDN blocks one attempt
-    for i in range(3):
-        r = s.get(url, params=params, cookies=cookies, timeout=30)
-        print(f"[INFO] Attempt {i+1}: HTTP {r.status_code}")
-        if r.status_code == 200:
-            return r.json()
-        if r.status_code in (403, 429):
-            time.sleep(2 + i)  # small backoff and try again
-            continue
-        # Other codes -> raise
-        print(f"[ERROR] ESPN HTTP {r.status_code}: {r.text[:400]}", file=sys.stderr)
-        r.raise_for_status()
+    hosts = [
+        f"https://fantasy.espn.com/apis/v3/games/ffl/seasons/{season}/segments/0/leagues/{league_id}",
+        f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{season}/segments/0/leagues/{league_id}",
+    ]
 
-    # If we’re here, we kept getting 403/429
-    print(f"[ERROR] ESPN blocking the request (HTTP {r.status_code}). Check cookies and SWID braces, then try again.", file=sys.stderr)
-    r.raise_for_status()
+    for host in hosts:
+        print(f"[INFO] Trying host: {host}")
+        for i in range(3):
+            r = _try_fetch(s, host, params, cookies)
+            if r.status_code == 200:
+                if r.headers.get("Content-Type", "").lower().startswith("application/json"):
+                    return r.json()
+                # got HTML/login; soft-retry
+                time.sleep(1 + i)
+                continue
+            if r.status_code in (403, 429):
+                time.sleep(2 + i)
+                continue
+            print(f"[ERROR] ESPN HTTP {r.status_code}: {(r.text or '')[:300]}", file=sys.stderr)
+            r.raise_for_status()
+
+    fail("ESPN kept returning non-JSON or blocked responses. Refresh ESPN_S2 and SWID (keep braces {}) and try again.")
+
 
 def summarize_matchups(data, week):
     teams = {t["id"]: t["location"] + " " + t["nickname"] for t in data["teams"]}
