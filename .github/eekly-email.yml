@@ -1,0 +1,85 @@
+name: Fantasy Weekly Email
+
+on:
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "NFL/Fantasy Week number"
+        required: true
+        default: "1"
+      mode:
+        description: "'draft' to create Gmail draft, 'send' to send"
+        required: true
+        default: "draft"
+  schedule:
+    - cron: "0 15 * * 1"  # Mondays ~9am America/Denver (MDT)
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    env:
+      LEAGUE_ID: ${{ secrets.LEAGUE_ID }}
+      ESPN_S2: ${{ secrets.ESPN_S2 }}
+      SWID: ${{ secrets.SWID }}
+      FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+      GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+      GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+      GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+      RECIPIENTS: ${{ secrets.RECIPIENTS }}
+      WEEK: ${{ inputs.week }}
+      SEND_MODE: ${{ inputs.mode }}
+      SEASON: "2025"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Preflight – check env and Python
+        run: |
+          python --version
+          echo "LEAGUE_ID=${{ secrets.LEAGUE_ID && 'present' || 'MISSING' }}"
+          echo "ESPN_S2=${{ secrets.ESPN_S2 && 'present' || 'MISSING' }}"
+          echo "SWID=${{ secrets.SWID && 'present' || 'MISSING (include curly braces {})' }}"
+          echo "FROM_EMAIL=${{ secrets.FROM_EMAIL && 'present' || 'MISSING' }}"
+          echo "GMAIL_CLIENT_ID=${{ secrets.GMAIL_CLIENT_ID && 'present' || 'MISSING' }}"
+          echo "GMAIL_CLIENT_SECRET=${{ secrets.GMAIL_CLIENT_SECRET && 'present' || 'MISSING' }}"
+          echo "GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN && 'present' || 'MISSING' }}"
+          echo "RECIPIENTS=${{ secrets.RECIPIENTS && 'present' || 'empty (ok)'}}"
+          echo "WEEK=${{ inputs.week }}"
+          echo "MODE=${{ inputs.mode }}"
+
+      - name: ESPN connectivity check (no secrets printed)
+        run: |
+          URL="https://fantasy.espn.com/apis/v3/games/ffl/seasons/${{ env.SEASON }}/segments/0/leagues/${{ secrets.LEAGUE_ID }}?view=mMatchupScore&scoringPeriodId=${{ inputs.week }}"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --cookie "espn_s2=${{ secrets.ESPN_S2 }}; SWID=${{ secrets.SWID }}" \
+            "$URL")
+          echo "HTTP status: $CODE"
+          if [ "$CODE" -ge 400 ]; then
+            echo "::error ::ESPN returned HTTP $CODE. Your ESPN_S2/SWID may be expired or wrong (SWID must include {})."
+            exit 1
+          fi
+
+      - name: Compose email from ESPN (show full traceback)
+        run: |
+          set -e
+          python -X dev -u compose_email.py
+
+      - name: Create Draft or Send (show full traceback)
+        run: |
+          set -e
+          python -X dev -u gmail_send.py
+
+      - name: Upload artifacts (debug)
+        if: ${{ hashFiles('out/**') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-preview
+          path: out/
