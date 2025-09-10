@@ -31,6 +31,8 @@ jobs:
       SEASON: "2025"  # <— add this for now so season is explicit
 
     steps:
+      - name: Hello from GitHub Actions
+        run: echo "Workflow dispatch is working. week=${{ inputs.week }} mode=${{ inputs.mode }}"
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
