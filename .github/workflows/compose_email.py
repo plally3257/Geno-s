@@ -162,25 +162,83 @@ def summarize_matchups(data, week):
 
 def extract_standings(data):
     """
-    Best-effort standings table if the teams payload includes record info.
-    Returns list of dicts: {name, wins, losses, ties, points_for}
+    Build a standings table from whatever fields are available.
+    Handles multiple ESPN shapes:
+      - t["record"]["overall"]{wins, losses, ties}
+      - flat fields like t["overallWins"], t["overallLosses"]
+      - points as float in t["points"] OR dict in t["points"]["scored"] OR valuesByStat["0"]
+    Returns: list of {name, wins, losses, ties, points_for} sorted by wins desc then PF desc.
     """
-    rows = []
-    for t in data.get("teams", []):
-        name = f"{t.get('location','Team')} {t.get('nickname','')}".strip() or t.get("name") or t.get("abbrev") or "Team"
+    def team_display_name(t: dict) -> str:
+        loc = (t.get("location") or "").strip()
+        nick = (t.get("nickname") or "").strip()
+        nm = (t.get("name") or "").strip()
+        abbr = (t.get("abbrev") or "").strip()
+        if loc or nick:
+            return f"{loc} {nick}".strip()
+        if nm:
+            return nm
+        if abbr:
+            return abbr
+        tid = t.get("id")
+        return f"Team {tid}" if tid is not None else "Team"
+
+    def get_record_fields(t: dict):
+        # Preferred nested record
         rec = (t.get("record") or {}).get("overall") or {}
         wins = rec.get("wins")
         losses = rec.get("losses")
         ties = rec.get("ties")
-        pf = t.get("points", {}).get("scored") or t.get("valuesByStat", {}).get("0")  # stat 0 often points
-        if wins is not None and losses is not None:
-            rows.append({
-                "name": name,
-                "wins": int(wins),
-                "losses": int(losses),
-                "ties": int(ties or 0),
-                "points_for": round(float(pf or 0), 2),
-            })
+        # Fallback to flat fields if nested missing
+        if wins is None or losses is None:
+            wins = t.get("overallWins", wins)
+            losses = t.get("overallLosses", losses)
+            ties = t.get("overallTies", ties)
+        # Normalize to ints or 0
+        try:
+            wins = int(wins) if wins is not None else 0
+        except Exception:
+            wins = 0
+        try:
+            losses = int(losses) if losses is not None else 0
+        except Exception:
+            losses = 0
+        try:
+            ties = int(ties) if ties is not None else 0
+        except Exception:
+            ties = 0
+        return wins, losses, ties
+
+    def get_points_for(t: dict) -> float:
+        # Some leagues expose a float at t["points"], others use dicts or valuesByStat
+        pf = t.get("points")
+        if isinstance(pf, (int, float)):
+            return float(pf)
+        if isinstance(pf, dict):
+            val = pf.get("scored")
+            if isinstance(val, (int, float)):
+                return float(val)
+        vbs = t.get("valuesByStat") or {}
+        stat0 = vbs.get("0")
+        if isinstance(stat0, (int, float)):
+            return float(stat0)
+        # Last resort
+        return 0.0
+
+    rows = []
+    for t in data.get("teams", []) or []:
+        name = team_display_name(t)
+        wins, losses, ties = get_record_fields(t)
+        pf = round(get_points_for(t), 2)
+        rows.append({
+            "name": name,
+            "wins": wins,
+            "losses": losses,
+            "ties": ties,
+            "points_for": pf,
+        })
+
+    # Sort by wins desc, then points_for desc
     rows.sort(key=lambda r: (r["wins"], r["points_for"]), reverse=True)
     return rows
 
