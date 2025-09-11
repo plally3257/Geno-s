@@ -215,72 +215,124 @@ def _safe_entries(side):
 def build_week_stats_from_boxscore(boxscore, teams, week):
     """
     Produce per-team rows with player-level context for the week.
-    Each row: {team, pts, opp, opp_pts, won, abs_margin, starters: [...], bench: [...]}
-    Player item: {name, posId, slotId, points}
+    Each row: {team, pts, opp, opp_pts, won, abs_margin, starters:[...], bench:[...], proj: float|None}
+    Player item: {name, posId, slotId, points, proj}
     """
     if not isinstance(boxscore, dict):
         return None
 
+    LINEUP_SLOT_BENCH = 20  # keep local in case constants move
     team_map = {t.get("id"): _team_display_name(t) for t in (teams or []) if t.get("id") is not None}
     rows = []
 
+    def parse_entries(e_list):
+        out = []
+        wk_key = str(week)
+        for e in (e_list or []):
+            try:
+                ppe = e.get("playerPoolEntry", {}) if isinstance(e, dict) else {}
+                player = ppe.get("player", {}) if isinstance(ppe, dict) else {}
+                full = player.get("fullName") or player.get("name") or "Player"
+                posId = player.get("defaultPositionId")
+                slotId = e.get("lineupSlotId")
+                pts = e.get("appliedStatTotal")
+                if not isinstance(pts, (int, float)):
+                    pts = e.get("appliedTotal")
+                if not isinstance(pts, (int, float)):
+                    pts = 0.0
+
+                # Heuristics for projected points (best-effort; varies by league)
+                proj = None
+                # 1) entry.ratings[week] totalProjection/totalProjectedPoints
+                ratings = e.get("ratings")
+                if isinstance(ratings, dict):
+                    rW = ratings.get(wk_key) or ratings.get("0") or {}
+                    for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
+                        if isinstance(rW.get(k), (int, float)):
+                            proj = float(rW[k]); break
+                # 2) ppe.ratings[week] ...
+                if proj is None and isinstance(ppe, dict):
+                    pr = ppe.get("ratings")
+                    if isinstance(pr, dict):
+                        rW = pr.get(wk_key) or pr.get("0") or {}
+                        for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
+                            if isinstance(rW.get(k), (int, float)):
+                                proj = float(rW[k]); break
+                # 3) common direct fields
+                if proj is None:
+                    for k in ("projectedPoints", "projectedTotal", "pointsProjected"):
+                        v = e.get(k)
+                        if isinstance(v, (int, float)):
+                            proj = float(v); break
+
+                out.append({
+                    "name": full,
+                    "posId": posId,
+                    "slotId": slotId,
+                    "points": round(float(pts), 2),
+                    "proj": float(proj) if isinstance(proj, (int, float)) else None,
+                })
+            except Exception:
+                continue
+        return out
+
+    def _safe_entries(side):
+        if not isinstance(side, dict):
+            return []
+        r = side.get("rosterForCurrentScoringPeriod") or side.get("rosterForMatchupPeriod")
+        return (r or {}).get("entries") or []
+
     for m in (boxscore.get("schedule") or []):
-        if m.get("matchupPeriodId") != int(week): 
+        if m.get("matchupPeriodId") != int(week):
             continue
         home = m.get("home") or {}
         away = m.get("away") or {}
-
-        hid = home.get("teamId")
-        aid = away.get("teamId")
-        home_name = team_map.get(hid, f"Team {hid}")
-        away_name = team_map.get(aid, f"Team {aid}")
-
-        # points
-        hpts = float(home.get("totalPoints", 0) or 0)
-        apts = float(away.get("totalPoints", 0) or 0)
-        margin = abs(hpts - apts)
-        winner = "home" if hpts > apts else ("away" if apts > hpts else "tie")
-
-        def parse_entries(e_list):
-            out = []
-            for e in (e_list or []):
-                try:
-                    ppe = e.get("playerPoolEntry", {})
-                    player = ppe.get("player", {}) if isinstance(ppe, dict) else {}
-                    full = player.get("fullName") or player.get("name") or "Player"
-                    posId = player.get("defaultPositionId")
-                    slotId = e.get("lineupSlotId")
-                    pts = e.get("appliedStatTotal")
-                    if pts is None:
-                        # sometimes points live under 'appliedTotal' or 'ratings' shape
-                        pts = e.get("appliedTotal")
-                    if not isinstance(pts, (int, float)):
-                        pts = 0.0
-                    out.append({"name": full, "posId": posId, "slotId": slotId, "points": round(float(pts), 2)})
-                except Exception:
-                    continue
-            return out
+        hid, aid = home.get("teamId"), away.get("teamId")
 
         h_entries = parse_entries(_safe_entries(home))
         a_entries = parse_entries(_safe_entries(away))
 
+        LINEUP_SLOT_BENCH = 20
         h_starters = [x for x in h_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
         h_bench    = [x for x in h_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
         a_starters = [x for x in a_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
         a_bench    = [x for x in a_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
 
+        hpts = float(home.get("totalPoints", 0) or 0)
+        apts = float(away.get("totalPoints", 0) or 0)
+        margin = abs(hpts - apts)
+        winner = "home" if hpts > apts else ("away" if apts > hpts else "tie")
+
+        # Sum starter projections if any exist
+        def sum_proj(starters):
+            projs = [p["proj"] for p in starters if isinstance(p.get("proj"), (int, float))]
+            return round(sum(projs), 2) if projs else None
+
         rows.append({
-            "team": home_name, "pts": round(hpts,2), "opp": away_name, "opp_pts": round(apts,2),
-            "won": winner=="home", "abs_margin": round(margin,2),
-            "starters": h_starters, "bench": h_bench
+            "team": team_map.get(hid, f"Team {hid}"),
+            "pts": round(hpts, 2),
+            "opp": team_map.get(aid, f"Team {aid}"),
+            "opp_pts": round(apts, 2),
+            "won": winner == "home",
+            "abs_margin": round(margin, 2),
+            "starters": h_starters,
+            "bench": h_bench,
+            "proj": sum_proj(h_starters),
         })
         rows.append({
-            "team": away_name, "pts": round(apts,2), "opp": home_name, "opp_pts": round(hpts,2),
-            "won": winner=="away", "abs_margin": round(margin,2),
-            "starters": a_starters, "bench": a_bench
+            "team": team_map.get(aid, f"Team {aid}"),
+            "pts": round(apts, 2),
+            "opp": team_map.get(hid, f"Team {hid}"),
+            "opp_pts": round(hpts, 2),
+            "won": winner == "away",
+            "abs_margin": round(margin, 2),
+            "starters": a_starters,
+            "bench": a_bench,
+            "proj": sum_proj(a_starters),
         })
 
     return rows
+
 
 # ======================
 # Weekly challenge logic
@@ -472,13 +524,24 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
 # Narrative blurb
 # ===============
 
-def build_narrative(matchups, week):
+def build_narrative(matchups, week, week_rows=None):
+    """
+    Week recap with:
+      - closest game
+      - biggest blowout
+      - rotating tease for any team >20 below projection (if projections available)
+      - rotating jab for the week's lowest score
+    Rotation index = (week-1) % 3
+    """
     if not matchups:
         return f"No results yet for Week {week}."
 
+    # Base storylines
     closest = min(matchups, key=lambda m: m["abs_margin"])
     blowout = max(matchups, key=lambda m: m["abs_margin"])
-    lowest = min(matchups, key=lambda m: min(m["home_pts"], m["away_pts"]))
+    lowest_pair = min(matchups, key=lambda m: min(m["home_pts"], m["away_pts"]))
+    loser_team = lowest_pair["home"] if lowest_pair["home_pts"] < lowest_pair["away_pts"] else lowest_pair["away"]
+    loser_score = min(lowest_pair["home_pts"], lowest_pair["away_pts"])
 
     lines = []
     lines.append(f"Week {week} is in the books!")
@@ -490,12 +553,35 @@ def build_narrative(matchups, week):
         f" Meanwhile, {blowout['home']} vs {blowout['away']} was a blowout "
         f"with a margin of {blowout['abs_margin']}."
     )
-    loser_team = lowest["home"] if lowest["home_pts"] < lowest["away_pts"] else lowest["away"]
-    loser_score = min(lowest["home_pts"], lowest["away_pts"])
-    lines.append(
-        f" And let’s not forget: {loser_team} posted a week-low {loser_score} points. Maybe try setting a lineup next time? 😉"
-    )
+
+    # Projection-based tease (>= 20 below projection), rotate 3 messages
+    idx = (int(week) - 1) % 3
+    if isinstance(week_rows, list) and week_rows:
+        underperf = []
+        for r in week_rows:
+            proj = r.get("proj")
+            pts = r.get("pts", 0)
+            if isinstance(proj, (int, float)) and (proj - pts) >= 20:
+                underperf.append({"team": r["team"], "proj": float(proj), "pts": float(pts), "delta": round(float(proj - pts), 2)})
+        if underperf:
+            worst = max(underperf, key=lambda x: x["delta"])
+            u_msgs = [
+                f"{worst['team']} missed the memo: projected {worst['proj']:.1f}, delivered {worst['pts']:.1f} (−{worst['delta']:.1f}).",
+                f"{worst['team']} got humbled—{worst['proj']:.1f} projected, only {worst['pts']:.1f}. That’s a {worst['delta']:.1f}-point faceplant.",
+                f"Vegas had {worst['team']} at {worst['proj']:.1f}; reality said {worst['pts']:.1f}. {worst['delta']:.1f} under. Yikes.",
+            ]
+            lines.append(" " + u_msgs[idx])
+
+    # Rotating lowest-score jab (3 variants)
+    l_msgs = [
+        f"And bringing up the rear, {loser_team} with just {loser_score:.1f}. Someone check their Wi-Fi.",
+        f"Weekly floor goes to {loser_team}: {loser_score:.1f} points. Bench might sue for playing time.",
+        f"{loser_team} posted {loser_score:.1f}. The kicker’s carpool scored more.",
+    ]
+    lines.append(" " + l_msgs[idx])
+
     return " ".join(lines)
+
 
 # =============
 # HTML template
