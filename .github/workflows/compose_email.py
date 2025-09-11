@@ -509,11 +509,11 @@ HTML_TMPL = Template("""
       <tr>
         <td align="center">
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px; max-width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+            
             <!-- Header -->
             <tr>
               <td style="background:#0f172a; color:#ffffff; padding:24px 28px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Fantasy Weekly</div>
-                <div style="margin-top:6px; font-size:13px; opacity:.9;">Week {{ week }} • Generated {{ now }}</div>
+                <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
               </td>
             </tr>
 
@@ -589,7 +589,7 @@ HTML_TMPL = Template("""
               </td>
             </tr>
 
-            <!-- Standings (optional) -->
+            <!-- Standings -->
             {% if standings and standings|length > 0 %}
             <tr>
               <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -621,9 +621,11 @@ HTML_TMPL = Template("""
             <!-- Footer -->
             <tr>
               <td style="padding:18px 24px 26px 24px; font-family:Arial, Helvetica, sans-serif; color:#94a3b8; font-size:12px; text-align:center;">
-                Sent by your friendly Fantasy Agent • Week {{ week }}
+                Sent from the Geno's league headquarters by Commissioner Lally's office • Week {{ week }}<br>
+                Generated {{ now }}
               </td>
             </tr>
+            
           </table>
         </td>
       </tr>
@@ -631,6 +633,7 @@ HTML_TMPL = Template("""
   </body>
 </html>
 """.strip())
+
 
 # =====
 # Main
