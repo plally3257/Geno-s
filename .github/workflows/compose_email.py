@@ -20,8 +20,10 @@ WEEK = os.environ.get("WEEK")
 ESPN_S2 = os.environ["ESPN_S2"]
 SWID = os.environ["SWID"]
 
-# Path for header image (PNG)
-HEADER_IMG_PATH = "/mnt/data/genosmith.PNG"
+# Header image configuration (see resolve_header_image below)
+HEADER_IMG_PATH = os.environ.get("HEADER_IMG_PATH", "/mnt/data/genosmith.PNG")
+HEADER_IMG_URL = os.environ.get("HEADER_IMG_URL")  # Prefer this for Gmail (public HTTPS)
+HEADER_IMG_ASSET = os.environ.get("HEADER_IMG_ASSET", "assets/genosmith.png")  # Repo file path
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -54,7 +56,7 @@ def _try_fetch(session, url, params, cookies):
     return r
 
 # ============
-# Image helper
+# Image helpers
 # ============
 
 def image_data_uri(path: str) -> str | None:
@@ -66,6 +68,45 @@ def image_data_uri(path: str) -> str | None:
     except Exception as e:
         print(f"[WARN] Could not load header image: {e}", file=sys.stderr)
         return None
+
+def resolve_header_image() -> str | None:
+    """
+    Returns a string usable in <img src="...">.
+
+    Preference:
+      1) HEADER_IMG_URL (public HTTPS URL; best for Gmail)
+      2) Repo asset -> GitHub raw URL (in Actions)
+      3) Local file -> data URI (good for local preview; may not show in Gmail)
+    """
+    # 1) Explicit URL wins
+    if HEADER_IMG_URL:
+        return HEADER_IMG_URL
+
+    # 2) Repo asset → raw URL in Actions (or base64 locally)
+    try:
+        if os.path.exists(HEADER_IMG_ASSET):
+            repo = os.environ.get("GITHUB_REPOSITORY")  # e.g., user/repo
+            ref  = os.environ.get("GITHUB_REF_NAME") or "main"
+            if repo:
+                return f"https://raw.githubusercontent.com/{repo}/{ref}/{HEADER_IMG_ASSET}"
+            # Local preview fallback
+            uri = image_data_uri(HEADER_IMG_ASSET)
+            if uri:
+                return uri
+    except Exception:
+        pass
+
+    # 3) Local absolute path → data URI (last resort)
+    try:
+        if os.path.exists(HEADER_IMG_PATH):
+            uri = image_data_uri(HEADER_IMG_PATH)
+            if uri:
+                return uri
+    except Exception:
+        pass
+
+    print("[WARN] Header image not found. Set HEADER_IMG_URL or add assets/genosmith.png", file=sys.stderr)
+    return None
 
 # =====================
 # ESPN data fetching
@@ -115,7 +156,7 @@ def espn_fetch_jsons(league_id, season, week):
     else:
         out["teams"] = out["scoreboard"].get("teams", [])
 
-    # 3) Boxscore (mMatchup) for lineups/players (best-effort; may not exist in all leagues)
+    # 3) Boxscore (mMatchup) for lineups/players (best-effort)
     for host in hosts:
         print(f"[INFO] Fetching boxscore via mMatchup: {host}")
         r = _try_fetch(s, host, {"view": "mMatchup", "scoringPeriodId": str(week)}, cookies)
@@ -149,7 +190,7 @@ def summarize_matchups(scoreboard, teams, week):
 
     matchups = []
     for m in (scoreboard.get("schedule") or []):
-        if m.get("matchupPeriodId") != int(week): 
+        if m.get("matchupPeriodId") != int(week):
             continue
         if "away" not in m or "home" not in m:
             continue
@@ -239,7 +280,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
     if not isinstance(boxscore, dict):
         return None
 
-    LINEUP_SLOT_BENCH = 20  # keep local in case constants move
     team_map = {t.get("id"): _team_display_name(t) for t in (teams or []) if t.get("id") is not None}
     rows = []
 
@@ -294,12 +334,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                 continue
         return out
 
-    def _safe_entries(side):
-        if not isinstance(side, dict):
-            return []
-        r = side.get("rosterForCurrentScoringPeriod") or side.get("rosterForMatchupPeriod")
-        return (r or {}).get("entries") or []
-
     for m in (boxscore.get("schedule") or []):
         if m.get("matchupPeriodId") != int(week):
             continue
@@ -310,7 +344,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         h_entries = parse_entries(_safe_entries(home))
         a_entries = parse_entries(_safe_entries(away))
 
-        LINEUP_SLOT_BENCH = 20
         h_starters = [x for x in h_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
         h_bench    = [x for x in h_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
         a_starters = [x for x in a_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
@@ -524,7 +557,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         13: most_points_against_cumulative,
     }
 
-
     fn = mapping.get(int(week))
     if not fn:
         return None
@@ -578,7 +610,7 @@ def describe_upcoming_challenge(current_week:int) -> dict | None:
 # Power rankings (new)
 # ============================
 
-def compute_power_rankings(standings: list[dict]) -> list[dict]:
+def compute_power_rankings(standings):
     """
     Compute a simple weekly power ranking:
       score = 2*wins - losses + (points_for - points_against) / 100
@@ -904,8 +936,8 @@ def main():
     if not matchups:
         print("[WARN] No matchups found for that week/season.", file=sys.stderr)
 
-    # Load header image as data URI (gracefully optional)
-    header_img = image_data_uri(HEADER_IMG_PATH)
+    # Load header image (prefers URL for email client compatibility)
+    header_img = resolve_header_image()
 
     html = HTML_TMPL.render(
         week=week,
