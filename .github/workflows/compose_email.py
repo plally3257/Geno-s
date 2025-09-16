@@ -216,48 +216,14 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
     """
     Produce per-team rows with player-level context for the week.
     Each row: {team, pts, opp, opp_pts, won, abs_margin, starters:[...], bench:[...], proj: float|None}
-    Player item: {name, posId, slotId, points, proj, is_monday}
+    Player item: {name, posId, slotId, points, proj}
     """
     if not isinstance(boxscore, dict):
         return None
 
-    LINEUP_SLOT_BENCH = 20
+    LINEUP_SLOT_BENCH = 20  # keep local in case constants move
     team_map = {t.get("id"): _team_display_name(t) for t in (teams or []) if t.get("id") is not None}
     rows = []
-
-    def _played_on_monday(player: dict, wk: int) -> bool:
-        # Try proGamesByScoringPeriod first (common on ESPN)
-        try:
-            games = player.get("proGamesByScoringPeriod") or {}
-            glist = games.get(str(wk)) or games.get(wk) or []
-            for g in glist:
-                ts = g.get("date")
-                if isinstance(ts, (int, float)):
-                    dt = datetime.datetime.utcfromtimestamp(ts / 1000.0)
-                elif isinstance(ts, str):
-                    # ISO-ish fallback
-                    try:
-                        dt = datetime.datetime.fromisoformat(ts.replace("Z","+00:00")).replace(tzinfo=None)
-                    except Exception:
-                        continue
-                else:
-                    continue
-                if dt.weekday() == 0:  # Monday
-                    return True
-        except Exception:
-            pass
-
-        # Fallbacks: look for a single gameDate on the player shape
-        for k in ("gameDate", "lastNewsDate", "firstGameDate"):
-            ts = player.get(k)
-            if isinstance(ts, (int, float)):
-                try:
-                    dt = datetime.datetime.utcfromtimestamp(ts / 1000.0)
-                    if dt.weekday() == 0:
-                        return True
-                except Exception:
-                    pass
-        return False
 
     def parse_entries(e_list):
         out = []
@@ -275,14 +241,16 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                 if not isinstance(pts, (int, float)):
                     pts = 0.0
 
-                # Projections (best-effort, varies by league)
+                # Heuristics for projected points (best-effort; varies by league)
                 proj = None
+                # 1) entry.ratings[week] totalProjection/totalProjectedPoints
                 ratings = e.get("ratings")
                 if isinstance(ratings, dict):
                     rW = ratings.get(wk_key) or ratings.get("0") or {}
                     for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
                         if isinstance(rW.get(k), (int, float)):
                             proj = float(rW[k]); break
+                # 2) ppe.ratings[week] ...
                 if proj is None and isinstance(ppe, dict):
                     pr = ppe.get("ratings")
                     if isinstance(pr, dict):
@@ -290,6 +258,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                         for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
                             if isinstance(rW.get(k), (int, float)):
                                 proj = float(rW[k]); break
+                # 3) common direct fields
                 if proj is None:
                     for k in ("projectedPoints", "projectedTotal", "pointsProjected"):
                         v = e.get(k)
@@ -302,7 +271,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                     "slotId": slotId,
                     "points": round(float(pts), 2),
                     "proj": float(proj) if isinstance(proj, (int, float)) else None,
-                    "is_monday": _played_on_monday(player, week),
                 })
             except Exception:
                 continue
@@ -324,6 +292,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         h_entries = parse_entries(_safe_entries(home))
         a_entries = parse_entries(_safe_entries(away))
 
+        LINEUP_SLOT_BENCH = 20
         h_starters = [x for x in h_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
         h_bench    = [x for x in h_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
         a_starters = [x for x in a_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
@@ -334,6 +303,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         margin = abs(hpts - apts)
         winner = "home" if hpts > apts else ("away" if apts > hpts else "tie")
 
+        # Sum starter projections if any exist
         def sum_proj(starters):
             projs = [p["proj"] for p in starters if isinstance(p.get("proj"), (int, float))]
             return round(sum(projs), 2) if projs else None
@@ -364,7 +334,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
     return rows
 
 
-
 # ======================
 # Weekly challenge logic
 # ======================
@@ -374,44 +343,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
     Returns dict {title:'Weekly Challenge Winner', winner:'Team ...', detail:'...'} or None.
     Implements your updated rotation for Weeks 1–13.
     """
-def compute_monday_night_miracles(matchups, week_rows):
-    """
-    A matchup is a 'Monday Night Miracle' if the winning team’s Monday-night starters
-    outscored the opponent’s Monday-night starters by at least the final margin.
-    Returns a list of dicts: {winner, loser, margin, winner_mnf, loser_mnf}
-    """
-    if not (isinstance(matchups, list) and isinstance(week_rows, list)):
-        return []
-
-    # Quick map from team name -> MNF starter points
-    def monday_points_for(team_name: str) -> float:
-        for r in week_rows:
-            if r.get("team") == team_name:
-                starters = r.get("starters") or []
-                return round(sum(p.get("points", 0.0) for p in starters if p.get("is_monday")), 2)
-        return 0.0
-
-    miracles = []
-    for m in matchups:
-        if m.get("winner") not in ("home", "away"):
-            continue
-        home, away = m["home"], m["away"]
-        margin = float(m["abs_margin"])
-        winner = home if m["winner"] == "home" else away
-        loser  = away if m["winner"] == "home" else home
-
-        w_mnf = monday_points_for(winner)
-        l_mnf = monday_points_for(loser)
-        if (w_mnf - l_mnf) + 1e-9 >= margin and margin > 0:
-            miracles.append({
-                "winner": winner,
-                "loser": loser,
-                "margin": round(margin, 2),
-                "winner_mnf": w_mnf,
-                "loser_mnf": l_mnf,
-            })
-
-    return miracles
 
     # --- helpers reused across weeks ---
 
@@ -788,28 +719,6 @@ HTML_TMPL = Template("""
   </body>
 </html>
 """.strip())
-{% if miracles and miracles|length > 0 %}
-<tr>
-  <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#eff6ff; border:1px solid #3b82f6; border-radius:10px;">
-      <tr>
-        <td style="padding:14px 16px;">
-          <div style="font-size:15px; font-weight:700; color:#1e3a8a; margin-bottom:4px;">🌙 Monday Night Miracle</div>
-          <div style="font-size:14px; color:#1e3a8a; line-height:1.5;">
-            {% for mm in miracles %}
-              <div style="margin:4px 0;">
-                <strong>{{ mm.winner }}</strong> stunned <strong>{{ mm.loser }}</strong> by {{ mm.margin }} —
-                MNF starters {{ mm.winner_mnf }} vs {{ mm.loser_mnf }}.
-              </div>
-            {% endfor %}
-          </div>
-        </td>
-      </tr>
-    </table>
-  </td>
-</tr>
-{% endif %}
-
 
 
 # =====
@@ -832,7 +741,6 @@ def main():
 
     # player/bench/positions per team for the week (best-effort)
     week_rows = build_week_stats_from_boxscore(boxscore, teams, week)
-	miracles = compute_monday_night_miracles(matchups, week_rows)
 
     # compute Weekly Challenge per your rotation
     challenge = compute_week_challenge(week, matchups, standings, week_rows)
@@ -846,7 +754,6 @@ def main():
         standings=standings,
         narrative=narrative,
         challenge=challenge,
-		miracles=miracles,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     subject = f"Fantasy Week {week} Results & Notes"
