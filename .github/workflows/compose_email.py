@@ -519,10 +519,11 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         8:  most_points_scored_in_losing_effort,
         9:  first_place_after_week9,
         10: team_with_dst_most_points,
-        11: highest_combined_starting RB points_incl_flex if False else highest_combined_starting_rb_points_incl_flex,  # keep name stable
+        11: highest_combined_starting_rb_points_incl_flex,
         12: team_closest_to_projected_total,
         13: most_points_against_cumulative,
     }
+
 
     fn = mapping.get(int(week))
     if not fn:
