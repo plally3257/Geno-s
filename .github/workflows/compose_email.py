@@ -35,6 +35,7 @@ LINEUP_SLOT_BENCH = 20  # ESPN bench slot id
 POS_QB = 0
 POS_RB = 2
 POS_DST = 16
+POS_K = 17  # <-- added: used by Weekly Challenge rotation
 
 # ============
 # HTTP helpers
@@ -520,6 +521,74 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         return None
 
 
+# ============================
+# Upcoming challenge (new)
+# ============================
+
+def get_challenge_title_by_week(week:int) -> str | None:
+    """Return the subtitle/title for the challenge assigned to a given week number."""
+    titles = {
+        1:  "Highest scoring team",
+        2:  "Highest scoring player (starter, D/ST incl.)",
+        3:  "Lowest scoring bench player",
+        4:  "Smallest margin of victory",
+        5:  "Widest margin of victory",
+        6:  "Highest scoring starting K",
+        7:  "Highest scoring starting QB",
+        8:  "Most points in a losing effort",
+        9:  "First place overall (after 9 weeks)",
+        10: "D/ST with most points",
+        11: "Highest combined starting RB points",
+        12: "Closest to projected total",
+        13: "Most points against (season)",
+    }
+    return titles.get(int(week))
+
+def describe_upcoming_challenge(current_week:int) -> dict | None:
+    """Describe the upcoming week's challenge based on your rotation."""
+    next_week = int(current_week) + 1
+    title = get_challenge_title_by_week(next_week)
+    if not title:
+        return None
+    return {
+        "label": f"Next Week's Challenge (Week {next_week})",
+        "subtitle": title
+    }
+
+
+# ============================
+# Power rankings (new)
+# ============================
+
+def compute_power_rankings(standings: list[dict]) -> list[dict]:
+    """
+    Compute a simple weekly power ranking:
+      score = 2*wins - losses + (points_for - points_against) / 100
+    Sort by score desc, then PF desc.
+    """
+    if not standings:
+        return []
+    rows = []
+    for r in standings:
+        wins = r.get("wins", 0)
+        losses = r.get("losses", 0)
+        pf = float(r.get("points_for", 0))
+        pa = float(r.get("points_against", 0))
+        score = (2 * wins) - losses + (pf - pa) / 100.0
+        rows.append({
+            "name": r["name"],
+            "record": f"{wins}-{losses}" + (f"-{r['ties']}" if r.get("ties") else ""),
+            "pf": round(pf, 2),
+            "pa": round(pa, 2),
+            "score": round(score, 3)
+        })
+    rows.sort(key=lambda x: (x["score"], x["pf"]), reverse=True)
+    # add rank
+    for i, r in enumerate(rows, start=1):
+        r["rank"] = i
+    return rows
+
+
 # ===============
 # Narrative blurb
 # ===============
@@ -633,6 +702,26 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
+            <!-- Upcoming Weekly Challenge (NEW) -->
+            {% if next_challenge %}
+            <tr>
+              <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#eff6ff; border:1px solid #3b82f6; border-radius:10px;">
+                  <tr>
+                    <td style="padding:14px 16px;">
+                      <div style="font-size:15px; font-weight:700; color:#1e40af; margin-bottom:4px;">
+                        🔮 {{ next_challenge.label }}
+                      </div>
+                      <div style="font-size:14px; color:#1e3a8a;">
+                        {{ next_challenge.subtitle }}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
+
             <!-- Matchups -->
             <tr>
               <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -678,7 +767,7 @@ HTML_TMPL = Template("""
             <!-- Standings -->
             {% if standings and standings|length > 0 %}
             <tr>
-              <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
+              <td style="padding:4px 24px 12px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Standings</div>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
                   <thead>
@@ -704,6 +793,40 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
+            <!-- Power Rankings (NEW) -->
+            {% if power and power|length > 0 %}
+            <tr>
+              <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Power Rankings</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">#</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
+                      <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Record</th>
+                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">PF</th>
+                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">PA</th>
+                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in power %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.rank }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.name }}</td>
+                      <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.record }}</td>
+                      <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.pf }}</td>
+                      <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.pa }}</td>
+                      <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.score }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">Score = 2×Wins − Losses + (PF − PA)/100</div>
+              </td>
+            </tr>
+            {% endif %}
+
             <!-- Footer -->
             <tr>
               <td style="padding:18px 24px 26px 24px; font-family:Arial, Helvetica, sans-serif; color:#94a3b8; font-size:12px; text-align:center;">
@@ -719,7 +842,6 @@ HTML_TMPL = Template("""
   </body>
 </html>
 """.strip())
-
 
 # =====
 # Main
@@ -737,13 +859,17 @@ def main():
 
     matchups = summarize_matchups(scoreboard, teams, week)
     standings = extract_standings(teams)
-    narrative = build_narrative(matchups, week)
-
     # player/bench/positions per team for the week (best-effort)
     week_rows = build_week_stats_from_boxscore(boxscore, teams, week)
 
     # compute Weekly Challenge per your rotation
     challenge = compute_week_challenge(week, matchups, standings, week_rows)
+
+    # NEW: compute Power Rankings & Upcoming Challenge
+    power = compute_power_rankings(standings)
+    next_challenge = describe_upcoming_challenge(week)
+
+    narrative = build_narrative(matchups, week, week_rows)
 
     if not matchups:
         print("[WARN] No matchups found for that week/season.", file=sys.stderr)
@@ -754,6 +880,8 @@ def main():
         standings=standings,
         narrative=narrative,
         challenge=challenge,
+        next_challenge=next_challenge,
+        power=power,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     subject = f"Fantasy Week {week} Results & Notes"
