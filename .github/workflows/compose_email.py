@@ -20,9 +20,9 @@ WEEK = os.environ.get("WEEK")
 ESPN_S2 = os.environ["ESPN_S2"]
 SWID = os.environ["SWID"]
 
-# Header image configuration (see resolve_header_image below)
+# Header image configuration (Option A: public RAW URL preferred)
 HEADER_IMG_PATH = os.environ.get("HEADER_IMG_PATH", "/mnt/data/genosmith.PNG")
-HEADER_IMG_URL = os.environ.get("HEADER_IMG_URL")  # Prefer this for Gmail (public HTTPS)
+HEADER_IMG_URL = os.environ.get("HEADER_IMG_URL")  # Prefer this for Gmail (public HTTPS RAW URL)
 HEADER_IMG_ASSET = os.environ.get("HEADER_IMG_ASSET", "assets/genosmith.png")  # Repo file path
 
 HEADERS = {
@@ -71,10 +71,11 @@ def image_data_uri(path: str) -> str | None:
 
 def _normalize_github_url_to_raw(url: str) -> str:
     """
-    Convert GitHub blob/tree URLs to raw URLs so <img src> works in email.
+    Convert GitHub blob/tree/refs URLs to RAW URLs so <img src> works in email.
     Examples:
       https://github.com/U/R/blob/main/assets/x.png
       https://github.com/U/R/tree/main/assets/x.png
+      https://raw.githubusercontent.com/U/R/refs/heads/main/assets/x.png
     ->  https://raw.githubusercontent.com/U/R/main/assets/x.png
     """
     if not isinstance(url, str):
@@ -83,7 +84,6 @@ def _normalize_github_url_to_raw(url: str) -> str:
     if m:
         user, repo, _kind, branch, path = m.groups()
         return f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
-    # also normalize accidental refs/heads/main form
     m2 = re.match(r"^https?://raw\.githubusercontent\.com/([^/]+)/([^/]+)/refs/heads/([^/]+)/(.*)$", url)
     if m2:
         user, repo, branch, path = m2.groups()
@@ -94,10 +94,10 @@ def resolve_header_image() -> str | None:
     """
     Returns a string usable in <img src="...">.
 
-    Preference:
-      1) HEADER_IMG_URL (public HTTPS URL; best for Gmail)
-      2) Repo asset -> GitHub raw URL (in Actions)
-      3) Local file -> data URI (good for local preview; may not show in Gmail)
+    Preference (Option A):
+      1) HEADER_IMG_URL (public HTTPS RAW URL; best for Gmail)
+      2) Repo asset -> GitHub RAW URL (in Actions)
+      3) Local file -> data URI (OK for local preview; may not show in Gmail)
     """
     # 1) Explicit URL wins (normalize blob/tree/refs paths → raw)
     if HEADER_IMG_URL:
@@ -128,6 +128,29 @@ def resolve_header_image() -> str | None:
 
     print("[WARN] Header image not found. Set HEADER_IMG_URL or add assets/genosmith.png", file=sys.stderr)
     return None
+
+def verify_remote_image(url: str) -> tuple[bool, bytes | None, str]:
+    """
+    Try to download the image so we know it's public and returns an image/*.
+    Returns (ok, content_bytes, content_type).
+    If ok, writes a copy to out/header_test.png for debugging.
+    """
+    try:
+        r = requests.get(url, timeout=20, headers={"User-Agent": HEADERS["User-Agent"]})
+        ctype = (r.headers.get("Content-Type") or "").lower()
+        ok = (r.status_code == 200) and ctype.startswith("image/")
+        size = len(r.content or b"")
+        print(f"[INFO] Header image check: HTTP {r.status_code}  type={ctype}  bytes={size}  url={url}")
+        if ok:
+            os.makedirs("out", exist_ok=True)
+            with open("out/header_test.png", "wb") as f:
+                f.write(r.content)
+        else:
+            print("[WARN] Remote header image did not return image/* or 200; it may not render.", file=sys.stderr)
+        return ok, (r.content if ok else None), ctype
+    except Exception as e:
+        print(f"[WARN] Failed to fetch header image URL: {e}", file=sys.stderr)
+        return False, None, ""
 
 # =====================
 # ESPN data fetching
@@ -402,7 +425,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
 
     return rows
 
-
 # ======================
 # Weekly challenge logic
 # ======================
@@ -588,7 +610,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         print(f"[WARN] Challenge computation failed: {e}", file=sys.stderr)
         return None
 
-
 # ============================
 # Upcoming challenge (new)
 # ============================
@@ -623,7 +644,6 @@ def describe_upcoming_challenge(current_week:int) -> dict | None:
         "subtitle": title
     }
 
-
 # ============================
 # Power rankings (new)
 # ============================
@@ -655,7 +675,6 @@ def compute_power_rankings(standings):
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
     return rows
-
 
 # ===============
 # Narrative blurb
@@ -719,7 +738,6 @@ def build_narrative(matchups, week, week_rows=None):
 
     return " ".join(lines)
 
-
 # =============
 # HTML template
 # =============
@@ -727,7 +745,7 @@ def build_narrative(matchups, week, week_rows=None):
 HTML_TMPL = Template("""
 <!doctype html>
 <html>
-  <body style="margin:0; padding:0; background:#f5f7fb;">
+  <body style="margin:0, padding:0; background:#f5f7fb;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f5f7fb; padding:24px 0;">
       <tr>
         <td align="center">
@@ -954,8 +972,15 @@ def main():
     if not matchups:
         print("[WARN] No matchups found for that week/season.", file=sys.stderr)
 
-    # Load header image (prefers URL for email client compatibility)
+    # Load header image (Option A prefers a public RAW URL)
     header_img = resolve_header_image()
+
+    # If it's a URL, sanity-check fetchability (and save a debug copy)
+    if isinstance(header_img, str) and header_img.startswith(("http://", "https://")):
+        ok, _, _ = verify_remote_image(header_img)
+        if not ok:
+            print("[WARN] The header image URL was not fetchable as a public image. "
+                  "Ensure it's a public RAW URL and path/casing are correct.", file=sys.stderr)
 
     html = HTML_TMPL.render(
         week=week,
@@ -965,7 +990,7 @@ def main():
         challenge=challenge,
         next_challenge=next_challenge,
         power=power,
-        header_img=header_img,  # new
+        header_img=header_img,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     subject = f"Fantasy Week {week} Results & Notes"
