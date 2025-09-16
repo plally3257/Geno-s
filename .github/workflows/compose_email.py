@@ -1,4 +1,4 @@
-import os, requests, datetime, sys, time
+import os, requests, datetime, sys, time, base64
 from jinja2 import Template
 
 # =========================
@@ -20,6 +20,9 @@ WEEK = os.environ.get("WEEK")
 ESPN_S2 = os.environ["ESPN_S2"]
 SWID = os.environ["SWID"]
 
+# Path for header image (PNG)
+HEADER_IMG_PATH = "/mnt/data/genosmith.PNG"
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -35,7 +38,7 @@ LINEUP_SLOT_BENCH = 20  # ESPN bench slot id
 POS_QB = 0
 POS_RB = 2
 POS_DST = 16
-POS_K = 17  # <-- added: used by Weekly Challenge rotation
+POS_K = 17  # used by Weekly Challenge rotation
 
 # ============
 # HTTP helpers
@@ -49,6 +52,20 @@ def _try_fetch(session, url, params, cookies):
         snippet = (r.text or "")[:300].replace("\n", " ")
         print(f"[WARN] Non-JSON response snippet: {snippet}", file=sys.stderr)
     return r
+
+# ============
+# Image helper
+# ============
+
+def image_data_uri(path: str) -> str | None:
+    """Return a base64 data URI for a PNG at path, or None on failure."""
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except Exception as e:
+        print(f"[WARN] Could not load header image: {e}", file=sys.stderr)
+        return None
 
 # =====================
 # ESPN data fetching
@@ -502,7 +519,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         8:  most_points_scored_in_losing_effort,
         9:  first_place_after_week9,
         10: team_with_dst_most_points,
-        11: highest_combined_starting_rb_points_incl_flex,
+        11: highest_combined_starting RB points_incl_flex if False else highest_combined_starting_rb_points_incl_flex,  # keep name stable
         12: team_closest_to_projected_total,
         13: most_points_against_cumulative,
     }
@@ -667,8 +684,19 @@ HTML_TMPL = Template("""
             
             <!-- Header -->
             <tr>
-              <td style="background:#0f172a; color:#ffffff; padding:24px 28px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
+              <td style="background:#0f172a; color:#ffffff; padding:20px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
+                    </td>
+                    {% if header_img %}
+                    <td align="right" style="vertical-align:middle;">
+                      <img src="{{ header_img }}" alt="Geno header" style="display:block; height:48px; width:auto; border:0; outline:none; text-decoration:none;">
+                    </td>
+                    {% endif %}
+                  </tr>
+                </table>
               </td>
             </tr>
 
@@ -869,10 +897,14 @@ def main():
     power = compute_power_rankings(standings)
     next_challenge = describe_upcoming_challenge(week)
 
+    # Narrative
     narrative = build_narrative(matchups, week, week_rows)
 
     if not matchups:
         print("[WARN] No matchups found for that week/season.", file=sys.stderr)
+
+    # Load header image as data URI (gracefully optional)
+    header_img = image_data_uri(HEADER_IMG_PATH)
 
     html = HTML_TMPL.render(
         week=week,
@@ -882,6 +914,7 @@ def main():
         challenge=challenge,
         next_challenge=next_challenge,
         power=power,
+        header_img=header_img,  # new
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     subject = f"Fantasy Week {week} Results & Notes"
