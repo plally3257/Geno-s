@@ -1,4 +1,4 @@
-import os, requests, datetime, sys, time, base64
+import os, requests, datetime, sys, time, base64, re
 from jinja2 import Template
 
 # =========================
@@ -69,6 +69,27 @@ def image_data_uri(path: str) -> str | None:
         print(f"[WARN] Could not load header image: {e}", file=sys.stderr)
         return None
 
+def _normalize_github_url_to_raw(url: str) -> str:
+    """
+    Convert GitHub blob/tree URLs to raw URLs so <img src> works in email.
+    Examples:
+      https://github.com/U/R/blob/main/assets/x.png
+      https://github.com/U/R/tree/main/assets/x.png
+    ->  https://raw.githubusercontent.com/U/R/main/assets/x.png
+    """
+    if not isinstance(url, str):
+        return url
+    m = re.match(r"^https?://github\.com/([^/]+)/([^/]+)/(blob|tree)/([^/]+)/(.*)$", url)
+    if m:
+        user, repo, _kind, branch, path = m.groups()
+        return f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
+    # also normalize accidental refs/heads/main form
+    m2 = re.match(r"^https?://raw\.githubusercontent\.com/([^/]+)/([^/]+)/refs/heads/([^/]+)/(.*)$", url)
+    if m2:
+        user, repo, branch, path = m2.groups()
+        return f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
+    return url
+
 def resolve_header_image() -> str | None:
     """
     Returns a string usable in <img src="...">.
@@ -78,9 +99,9 @@ def resolve_header_image() -> str | None:
       2) Repo asset -> GitHub raw URL (in Actions)
       3) Local file -> data URI (good for local preview; may not show in Gmail)
     """
-    # 1) Explicit URL wins
+    # 1) Explicit URL wins (normalize blob/tree/refs paths → raw)
     if HEADER_IMG_URL:
-        return HEADER_IMG_URL
+        return _normalize_github_url_to_raw(HEADER_IMG_URL)
 
     # 2) Repo asset → raw URL in Actions (or base64 locally)
     try:
@@ -301,14 +322,12 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
 
                 # Heuristics for projected points (best-effort; varies by league)
                 proj = None
-                # 1) entry.ratings[week] totalProjection/totalProjectedPoints
                 ratings = e.get("ratings")
                 if isinstance(ratings, dict):
                     rW = ratings.get(wk_key) or ratings.get("0") or {}
                     for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
                         if isinstance(rW.get(k), (int, float)):
                             proj = float(rW[k]); break
-                # 2) ppe.ratings[week] ...
                 if proj is None and isinstance(ppe, dict):
                     pr = ppe.get("ratings")
                     if isinstance(pr, dict):
@@ -316,7 +335,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                         for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
                             if isinstance(rW.get(k), (int, float)):
                                 proj = float(rW[k]); break
-                # 3) common direct fields
                 if proj is None:
                     for k in ("projectedPoints", "projectedTotal", "pointsProjected"):
                         v = e.get(k)
