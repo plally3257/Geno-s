@@ -31,6 +31,9 @@ jobs:
       SEND_MODE: ${{ inputs.mode }}
       SEASON: "2025"
 
+      # 👇 NEW: public RAW image URL (must be publicly accessible, no token/query)
+      HEADER_IMG_URL: "https://raw.githubusercontent.com/plally3257/Geno-s/main/assets/genosmith.PNG"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +77,7 @@ jobs:
           echo "RECIPIENTS=${{ secrets.RECIPIENTS && 'present' || 'empty (ok)'}}"
           echo "WEEK=${{ inputs.week }}"
           echo "MODE=${{ inputs.mode }}"
+          echo "HEADER_IMG_URL=${HEADER_IMG_URL}"
 
       - name: ESPN connectivity check (no secrets printed)
         run: |
@@ -87,20 +91,27 @@ jobs:
             exit 1
           fi
 
-      # 👉 Adjust the paths below depending on where your .py files are:
-      # If they live at the repo root, leave as-is.
-      # If they live in .github/workflows/, prefix with ".github/workflows/"
+      # 🔎 Optional but handy: verify header image is public and returns image/*
+      - name: Header image reachability check
+        run: |
+          echo "Testing HEADER_IMG_URL: ${HEADER_IMG_URL}"
+          curl -I -sS "${HEADER_IMG_URL}" | sed -n '1,10p'
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "${HEADER_IMG_URL}")
+          if [ "$CODE" -ne 200 ]; then
+            echo "::warning ::Header image URL returned HTTP $CODE. Image may not render in email."
+          fi
 
+      # 👉 Adjust script paths as needed
       - name: Compose email from ESPN (show full traceback)
         run: python .github/workflows/compose_email.py
 
       - name: Create Draft or Send (show full traceback)
         run: python .github/workflows/gmail_send.py
-          
 
       - name: Upload artifacts (debug)
         if: ${{ hashFiles('out/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: email-preview
-          path: out/
+          path: |
+            out/
