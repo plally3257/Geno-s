@@ -34,6 +34,7 @@ jobs:
 
       # 👇 NEW: public RAW image URL (must be publicly accessible, no token/query)
       HEADER_IMG_URL: "https://raw.githubusercontent.com/plally3257/Geno-s/main/assets/genosmith.PNG"
+      LOGO_URL: "https://raw.githubusercontent.com/Geno-s/Geno-s/main/assets/genosmith.PNG"
 
     steps:
       - uses: actions/checkout@v4
