@@ -794,22 +794,19 @@ HTML_TMPL = Template("""
 <!-- Header -->
 <tr>
   <td style="background:#0f172a; color:#ffffff; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; min-width:100%;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <!-- Left: Title -->
         <td align="left" valign="middle" style="padding-right:12px;">
-          <div style="font-size:22px; line-height:1.2; font-weight:700; letter-spacing:.3px; color:#ffffff;">
-            Geno's Weekly
-          </div>
+          <div style="font-size:22px; line-height:1.2; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
         </td>
-
-        <!-- Right: Logo (fixed width so it doesn't collapse on mobile) -->
+        <!-- Right: Logo -->
         <td align="right" valign="middle" width="120" style="width:120px;">
           {% if logo_url %}
           <img src="{{ logo_url }}"
                alt="Geno's Weekly"
-               width="120"  <!-- attribute matters on mobile clients -->
-               style="display:block; width:120px; height:auto; border:0; outline:none; text-decoration:none;">
+               width="120"
+               style="display:block;width:120px;height:auto;border:0;outline:none;text-decoration:none;">
           {% endif %}
         </td>
       </tr>
