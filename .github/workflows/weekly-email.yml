@@ -29,12 +29,8 @@ jobs:
       RECIPIENTS: ${{ secrets.RECIPIENTS }}
       WEEK: ${{ inputs.week }}
       SEND_MODE: ${{ inputs.mode }}
+      HEADER_IMG_URL: "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/assets/genosmith.PNG"
 
-      # --- Logo settings (pick ONE of the two blocks below) ---
-
-      # Option A: Build from repo/branch + path (works across branches)
-      LOGO_PATH: assets/genosmith.PNG
-      HEADER_IMG_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/${{ env.LOGO_PATH }}
 
     steps:
       - name: Checkout
@@ -44,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "HEADER_IMG_URL='${HEADER_IMG_URL:-<empty>}'"
-          curl -I --fail "$HEADER_IMG_URL"
+          curl -I --fail "${HEADER_IMG_URL:?HEADER_IMG_URL is empty}"
 
       - name: Compose email
         run: python .github/workflows/compose_email.py
