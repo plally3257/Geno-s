@@ -41,6 +41,16 @@ POS_TE = 6              # Tight End position id
 LINEUP_SLOT_FLEX = 23   # ESPN RB/WR/TE FLEX lineup slot id
 LINEUP_SLOT_IR = 21  # injured reserve; not a starter
 
+# Logo config (hosted URL)
+LOGO_URL = os.environ.get("LOGO_URL")
+if not LOGO_URL:
+    # Auto-build a GitHub raw URL if running in Actions and file at assets/genosmith.PNG
+    _repo = os.environ.get("GITHUB_REPOSITORY")  # "owner/repo"
+    _branch = os.environ.get("GITHUB_REF_NAME", "main")
+    _path = os.environ.get("LOGO_PATH", "assets/genosmith.PNG")
+    if _repo:
+        LOGO_URL = f"https://raw.githubusercontent.com/{_repo}/{_branch}/{_path}"
+
 # ============
 # HTTP helpers
 # ============
@@ -780,11 +790,14 @@ HTML_TMPL = Template("""
       <tr>
         <td align="center">
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px; max-width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-            
+    
             <!-- Header -->
             <tr>
-              <td style="background:#0f172a; color:#ffffff; padding:24px 28px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
+              <td style="background:#0f172a; color:#ffffff; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
+                {% if logo_url %}
+                  <img src="{{ logo_url }}" alt="Geno's Weekly" style="display:block; max-height:48px; margin:0; border:0; outline:none;">
+                {% endif %}
+                <div style="font-size:22px; font-weight:700; letter-spacing:.3px; margin-top:6px;">Geno's Weekly</div>
               </td>
             </tr>
 
@@ -1030,6 +1043,7 @@ def main():
         next_challenge=next_challenge,
         power=power,
         weekly_challenges=weekly_challenges,
+        logo_url=LOGO_URL,            # <— LOGO
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     subject = f"Fantasy Week {week} Results & Notes"
