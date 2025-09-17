@@ -31,7 +31,6 @@ jobs:
       SEND_MODE: ${{ inputs.mode }}
       HEADER_IMG_URL: "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/assets/genosmith.PNG"
 
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,3 +43,9 @@ jobs:
 
       - name: Compose email
         run: python .github/workflows/compose_email.py
+
+        - uses: actions/setup-python@v5
+          with: { python-version: "3.11" }
+        - run: pip install requests
+        - name: Create Gmail draft (or send)
+          run: python .github/workflows/send_gmail.py
