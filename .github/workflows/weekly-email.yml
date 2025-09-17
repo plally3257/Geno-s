@@ -1,3 +1,4 @@
+# .github/workflows/fantasy-weekly-email.yml  (example name)
 name: Fantasy Weekly Email
 
 on:
@@ -12,7 +13,7 @@ on:
         required: true
         default: "draft"
   schedule:
-    - cron: "0 15 * * 1"  # Mondays ~9am America/Denver (MDT)
+    - cron: "0 15 * * 1"  # Mondays ~9am America/Denver
 
 jobs:
   run:
@@ -29,91 +30,22 @@ jobs:
       RECIPIENTS: ${{ secrets.RECIPIENTS }}
       WEEK: ${{ inputs.week }}
       SEND_MODE: ${{ inputs.mode }}
-      # SEASON is optional—omit or set it like this:
-      # SEASON: ${{ vars.SEASON }}
 
-      # 👇 NEW: public RAW image URL (must be publicly accessible, no token/query)
-      LOGO_PATH: "assets/genosmith.PNG"
-      LOGO_URL: "https://raw.githubusercontent.com/Geno-s/Geno-s/main/assets/genosmith.PNG"
+      # --- Logo settings (pick ONE of the two blocks below) ---
+
+      # Option A: Build from repo/branch + path (works across branches)
+      LOGO_PATH: assets/genosmith.PNG
+      HEADER_IMG_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/${{ env.LOGO_PATH }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: List files for debugging
+      - name: Debug header image URL
         run: |
-          echo "Current directory:" 
-          pwd
-          echo "Top-level files:"
-          ls -la
-          echo "----"
-          echo "Show files up to 3 levels deep:"
-          find . -maxdepth 3 -type f | sort
+          set -euo pipefail
+          echo "HEADER_IMG_URL='${HEADER_IMG_URL:-<empty>}'"
+          curl -I --fail "$HEADER_IMG_URL"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (auto-detect requirements.txt)
-        run: |
-          if [ -f requirements.txt ]; then
-            echo "Installing from root requirements.txt"
-            pip install -r requirements.txt
-          elif [ -f .github/workflows/requirements.txt ]; then
-            echo "Installing from .github/workflows/requirements.txt"
-            pip install -r .github/workflows/requirements.txt
-          else
-            echo "::error ::No requirements.txt found in repo root or .github/workflows/"
-            exit 1
-          fi
-
-      - name: Preflight – check env and Python
-        run: |
-          python --version
-          echo "LEAGUE_ID=${{ secrets.LEAGUE_ID && 'present' || 'MISSING' }}"
-          echo "ESPN_S2=${{ secrets.ESPN_S2 && 'present' || 'MISSING' }}"
-          echo "SWID=${{ secrets.SWID && 'present' || 'MISSING (include curly braces {})' }}"
-          echo "FROM_EMAIL=${{ secrets.FROM_EMAIL && 'present' || 'MISSING' }}"
-          echo "GMAIL_CLIENT_ID=${{ secrets.GMAIL_CLIENT_ID && 'present' || 'MISSING' }}"
-          echo "GMAIL_CLIENT_SECRET=${{ secrets.GMAIL_CLIENT_SECRET && 'present' || 'MISSING' }}"
-          echo "GMAIL_REFRESH_TOKEN=${{ secrets.GMAIL_REFRESH_TOKEN && 'present' || 'MISSING' }}"
-          echo "RECIPIENTS=${{ secrets.RECIPIENTS && 'present' || 'empty (ok)'}}"
-          echo "WEEK=${{ inputs.week }}"
-          echo "MODE=${{ inputs.mode }}"
-          echo "HEADER_IMG_URL=${HEADER_IMG_URL}"
-
-      - name: ESPN connectivity check (no secrets printed)
-        run: |
-          URL="https://fantasy.espn.com/apis/v3/games/ffl/seasons/${{ env.SEASON }}/segments/0/leagues/${{ secrets.LEAGUE_ID }}?view=mMatchupScore&scoringPeriodId=${{ inputs.week }}"
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            --cookie "espn_s2=${{ secrets.ESPN_S2 }}; SWID=${{ secrets.SWID }}" \
-            "$URL")
-          echo "HTTP status: $CODE"
-          if [ "$CODE" -ge 400 ]; then
-            echo "::error ::ESPN returned HTTP $CODE. Your ESPN_S2/SWID may be expired or wrong (SWID must include {})."
-            exit 1
-          fi
-
-      # 🔎 Optional but handy: verify header image is public and returns image/*
-      - name: Header image reachability check
-        run: |
-          echo "Testing HEADER_IMG_URL: ${HEADER_IMG_URL}"
-          curl -I -sS "${HEADER_IMG_URL}" | sed -n '1,10p'
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" "${HEADER_IMG_URL}")
-          if [ "$CODE" -ne 200 ]; then
-            echo "::warning ::Header image URL returned HTTP $CODE. Image may not render in email."
-          fi
-
-      # 👉 Adjust script paths as needed
-      - name: Compose email from ESPN (show full traceback)
+      - name: Compose email
         run: python .github/workflows/compose_email.py
-
-      - name: Create Draft or Send (show full traceback)
-        run: python .github/workflows/gmail_send.py
-
-      - name: Upload artifacts (debug)
-        if: ${{ hashFiles('out/**') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: email-preview
-          path: |
-            out/
