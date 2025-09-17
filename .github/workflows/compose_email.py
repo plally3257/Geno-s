@@ -1,4 +1,4 @@
-import os, requests, datetime, sys, time, base64, re
+import os, requests, datetime, sys, time
 from jinja2 import Template
 
 # =========================
@@ -20,11 +20,6 @@ WEEK = os.environ.get("WEEK")
 ESPN_S2 = os.environ["ESPN_S2"]
 SWID = os.environ["SWID"]
 
-# Header image configuration (Option A: public RAW URL preferred)
-HEADER_IMG_PATH = os.environ.get("HEADER_IMG_PATH", "/mnt/data/genosmith.PNG")
-HEADER_IMG_URL = os.environ.get("HEADER_IMG_URL")  # Prefer this for Gmail (public HTTPS RAW URL)
-HEADER_IMG_ASSET = os.environ.get("HEADER_IMG_ASSET", "assets/genosmith.png")  # Repo file path
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
@@ -40,7 +35,7 @@ LINEUP_SLOT_BENCH = 20  # ESPN bench slot id
 POS_QB = 0
 POS_RB = 2
 POS_DST = 16
-POS_K = 17  # used by Weekly Challenge rotation
+POS_K = 17  # <-- used by Weekly Challenge rotation
 
 # ============
 # HTTP helpers
@@ -54,103 +49,6 @@ def _try_fetch(session, url, params, cookies):
         snippet = (r.text or "")[:300].replace("\n", " ")
         print(f"[WARN] Non-JSON response snippet: {snippet}", file=sys.stderr)
     return r
-
-# ============
-# Image helpers
-# ============
-
-def image_data_uri(path: str) -> str | None:
-    """Return a base64 data URI for a PNG at path, or None on failure."""
-    try:
-        with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
-        return f"data:image/png;base64,{b64}"
-    except Exception as e:
-        print(f"[WARN] Could not load header image: {e}", file=sys.stderr)
-        return None
-
-def _normalize_github_url_to_raw(url: str) -> str:
-    """
-    Convert GitHub blob/tree/refs URLs to RAW URLs so <img src> works in email.
-    Examples:
-      https://github.com/U/R/blob/main/assets/x.png
-      https://github.com/U/R/tree/main/assets/x.png
-      https://raw.githubusercontent.com/U/R/refs/heads/main/assets/x.png
-    ->  https://raw.githubusercontent.com/U/R/main/assets/x.png
-    """
-    if not isinstance(url, str):
-        return url
-    m = re.match(r"^https?://github\.com/([^/]+)/([^/]+)/(blob|tree)/([^/]+)/(.*)$", url)
-    if m:
-        user, repo, _kind, branch, path = m.groups()
-        return f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
-    m2 = re.match(r"^https?://raw\.githubusercontent\.com/([^/]+)/([^/]+)/refs/heads/([^/]+)/(.*)$", url)
-    if m2:
-        user, repo, branch, path = m2.groups()
-        return f"https://raw.githubusercontent.com/{user}/{repo}/{branch}/{path}"
-    return url
-
-def resolve_header_image() -> str | None:
-    """
-    Returns a string usable in <img src="...">.
-
-    Preference (Option A):
-      1) HEADER_IMG_URL (public HTTPS RAW URL; best for Gmail)
-      2) Repo asset -> GitHub RAW URL (in Actions)
-      3) Local file -> data URI (OK for local preview; may not show in Gmail)
-    """
-    # 1) Explicit URL wins (normalize blob/tree/refs paths → raw)
-    if HEADER_IMG_URL:
-        return _normalize_github_url_to_raw(HEADER_IMG_URL)
-
-    # 2) Repo asset → raw URL in Actions (or base64 locally)
-    try:
-        if os.path.exists(HEADER_IMG_ASSET):
-            repo = os.environ.get("GITHUB_REPOSITORY")  # e.g., user/repo
-            ref  = os.environ.get("GITHUB_REF_NAME") or "main"
-            if repo:
-                return f"https://raw.githubusercontent.com/{repo}/{ref}/{HEADER_IMG_ASSET}"
-            # Local preview fallback
-            uri = image_data_uri(HEADER_IMG_ASSET)
-            if uri:
-                return uri
-    except Exception:
-        pass
-
-    # 3) Local absolute path → data URI (last resort)
-    try:
-        if os.path.exists(HEADER_IMG_PATH):
-            uri = image_data_uri(HEADER_IMG_PATH)
-            if uri:
-                return uri
-    except Exception:
-        pass
-
-    print("[WARN] Header image not found. Set HEADER_IMG_URL or add assets/genosmith.png", file=sys.stderr)
-    return None
-
-def verify_remote_image(url: str) -> tuple[bool, bytes | None, str]:
-    """
-    Try to download the image so we know it's public and returns an image/*.
-    Returns (ok, content_bytes, content_type).
-    If ok, writes a copy to out/header_test.png for debugging.
-    """
-    try:
-        r = requests.get(url, timeout=20, headers={"User-Agent": HEADERS["User-Agent"]})
-        ctype = (r.headers.get("Content-Type") or "").lower()
-        ok = (r.status_code == 200) and ctype.startswith("image/")
-        size = len(r.content or b"")
-        print(f"[INFO] Header image check: HTTP {r.status_code}  type={ctype}  bytes={size}  url={url}")
-        if ok:
-            os.makedirs("out", exist_ok=True)
-            with open("out/header_test.png", "wb") as f:
-                f.write(r.content)
-        else:
-            print("[WARN] Remote header image did not return image/* or 200; it may not render.", file=sys.stderr)
-        return ok, (r.content if ok else None), ctype
-    except Exception as e:
-        print(f"[WARN] Failed to fetch header image URL: {e}", file=sys.stderr)
-        return False, None, ""
 
 # =====================
 # ESPN data fetching
@@ -200,7 +98,7 @@ def espn_fetch_jsons(league_id, season, week):
     else:
         out["teams"] = out["scoreboard"].get("teams", [])
 
-    # 3) Boxscore (mMatchup) for lineups/players (best-effort)
+    # 3) Boxscore (mMatchup) for lineups/players (best-effort; may not exist in all leagues)
     for host in hosts:
         print(f"[INFO] Fetching boxscore via mMatchup: {host}")
         r = _try_fetch(s, host, {"view": "mMatchup", "scoringPeriodId": str(week)}, cookies)
@@ -234,7 +132,7 @@ def summarize_matchups(scoreboard, teams, week):
 
     matchups = []
     for m in (scoreboard.get("schedule") or []):
-        if m.get("matchupPeriodId") != int(week):
+        if m.get("matchupPeriodId") != int(week): 
             continue
         if "away" not in m or "home" not in m:
             continue
@@ -324,6 +222,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
     if not isinstance(boxscore, dict):
         return None
 
+    LINEUP_SLOT_BENCH = 20  # keep local in case constants move
     team_map = {t.get("id"): _team_display_name(t) for t in (teams or []) if t.get("id") is not None}
     rows = []
 
@@ -343,7 +242,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                 if not isinstance(pts, (int, float)):
                     pts = 0.0
 
-                # Heuristics for projected points (best-effort; varies by league)
+                # Heuristics for projected points
                 proj = None
                 ratings = e.get("ratings")
                 if isinstance(ratings, dict):
@@ -375,6 +274,12 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                 continue
         return out
 
+    def _safe_entries(side):
+        if not isinstance(side, dict):
+            return []
+        r = side.get("rosterForCurrentScoringPeriod") or side.get("rosterForMatchupPeriod")
+        return (r or {}).get("entries") or []
+
     for m in (boxscore.get("schedule") or []):
         if m.get("matchupPeriodId") != int(week):
             continue
@@ -385,6 +290,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         h_entries = parse_entries(_safe_entries(home))
         a_entries = parse_entries(_safe_entries(away))
 
+        LINEUP_SLOT_BENCH = 20
         h_starters = [x for x in h_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
         h_bench    = [x for x in h_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
         a_starters = [x for x in a_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
@@ -395,7 +301,6 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         margin = abs(hpts - apts)
         winner = "home" if hpts > apts else ("away" if apts > hpts else "tie")
 
-        # Sum starter projections if any exist
         def sum_proj(starters):
             projs = [p["proj"] for p in starters if isinstance(p.get("proj"), (int, float))]
             return round(sum(projs), 2) if projs else None
@@ -518,7 +423,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         return ("Most points in a losing effort", r["team"], f"{r['pts']} pts")
 
     def first_place_after_week9():
-        # Only meaningful once week >= 9
         if week < 9 or not standings: return None
         top = standings[0]
         ties = f"-{top['ties']}" if top.get("ties") else ""
@@ -543,7 +447,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         for r in week_rows:
             total = 0.0
             for p in (r.get("starters") or []):
-                if p.get("posId") == POS_RB:  # RB anywhere, includes FLEX if RB
+                if p.get("posId") == POS_RB:
                     total += float(p.get("points",0) or 0)
             if total > best_sum:
                 best_sum = total
@@ -552,7 +456,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         return ("Highest combined starting RB points", best_team, f"{round(best_sum,2)} pts")
 
     def team_closest_to_projected_total():
-        # Best-effort: only if per-entry projections exist; otherwise hide.
         if not week_rows: return None
         best = None
         for r in week_rows:
@@ -580,7 +483,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         pa = r.get("points_against", 0)
         return ("Most points against (season)", r["name"], f"{pa} against")
 
-    # --- rotation per your updated list ---
     mapping = {
         1:  highest_scoring_team,
         2:  team_with_highest_scoring_player_starters_incl_dst,
@@ -615,7 +517,6 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
 # ============================
 
 def get_challenge_title_by_week(week:int) -> str | None:
-    """Return the subtitle/title for the challenge assigned to a given week number."""
     titles = {
         1:  "Highest scoring team",
         2:  "Highest scoring player (starter, D/ST incl.)",
@@ -634,7 +535,6 @@ def get_challenge_title_by_week(week:int) -> str | None:
     return titles.get(int(week))
 
 def describe_upcoming_challenge(current_week:int) -> dict | None:
-    """Describe the upcoming week's challenge based on your rotation."""
     next_week = int(current_week) + 1
     title = get_challenge_title_by_week(next_week)
     if not title:
@@ -648,7 +548,7 @@ def describe_upcoming_challenge(current_week:int) -> dict | None:
 # Power rankings (new)
 # ============================
 
-def compute_power_rankings(standings):
+def compute_power_rankings(standings: list[dict]) -> list[dict]:
     """
     Compute a simple weekly power ranking:
       score = 2*wins - losses + (points_for - points_against) / 100
@@ -671,9 +571,54 @@ def compute_power_rankings(standings):
             "score": round(score, 3)
         })
     rows.sort(key=lambda x: (x["score"], x["pf"]), reverse=True)
-    # add rank
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
+    return rows
+
+# =========================================
+# NEW: Build full Weekly Challenges section
+# =========================================
+
+MAX_CHALLENGE_WEEK = 13  # rotation covers weeks 1–13
+
+def _fetch_week_bits(season:int, week:int):
+    """Fetch scoreboard/teams/box + transform for a given week."""
+    payloads = espn_fetch_jsons(LEAGUE_ID, season, week)
+    scoreboard = payloads["scoreboard"]
+    teams = payloads["teams"]
+    boxscore = payloads["boxscore"]
+    matchups = summarize_matchups(scoreboard, teams, week)
+    week_rows = build_week_stats_from_boxscore(boxscore, teams, week)
+    standings = extract_standings(teams)
+    return matchups, standings, week_rows
+
+def build_weekly_challenges(season:int, current_week:int) -> list[dict]:
+    """
+    Returns rows: [{week, title, winner, detail}]
+    - For weeks <= current_week: compute winner from that week’s data.
+    - For weeks  > current_week: 'TBD' winner with challenge title.
+    """
+    rows = []
+    for wk in range(1, MAX_CHALLENGE_WEEK + 1):
+        title = get_challenge_title_by_week(wk) or f"Challenge Week {wk}"
+        if wk <= current_week:
+            try:
+                matchups, standings, week_rows = _fetch_week_bits(season, wk)
+                ch = compute_week_challenge(wk, matchups, standings, week_rows)
+                if ch:
+                    rows.append({
+                        "week": wk,
+                        "title": title,
+                        "winner": ch["winner"],
+                        "detail": ch["detail"]
+                    })
+                else:
+                    rows.append({"week": wk, "title": title, "winner": "—", "detail": ""})
+            except Exception as e:
+                print(f"[WARN] Weekly challenge W{wk} failed: {e}", file=sys.stderr)
+                rows.append({"week": wk, "title": title, "winner": "—", "detail": ""})
+        else:
+            rows.append({"week": wk, "title": title, "winner": "TBD", "detail": ""})
     return rows
 
 # ===============
@@ -692,7 +637,6 @@ def build_narrative(matchups, week, week_rows=None):
     if not matchups:
         return f"No results yet for Week {week}."
 
-    # Base storylines
     closest = min(matchups, key=lambda m: m["abs_margin"])
     blowout = max(matchups, key=lambda m: m["abs_margin"])
     lowest_pair = min(matchups, key=lambda m: min(m["home_pts"], m["away_pts"]))
@@ -710,7 +654,6 @@ def build_narrative(matchups, week, week_rows=None):
         f"with a margin of {blowout['abs_margin']}."
     )
 
-    # Projection-based tease (>= 20 below projection), rotate 3 messages
     idx = (int(week) - 1) % 3
     if isinstance(week_rows, list) and week_rows:
         underperf = []
@@ -728,7 +671,6 @@ def build_narrative(matchups, week, week_rows=None):
             ]
             lines.append(" " + u_msgs[idx])
 
-    # Rotating lowest-score jab (3 variants)
     l_msgs = [
         f"And bringing up the rear, {loser_team} with just {loser_score:.1f}. Someone check their Wi-Fi.",
         f"Weekly floor goes to {loser_team}: {loser_score:.1f} points. Bench might sue for playing time.",
@@ -745,7 +687,7 @@ def build_narrative(matchups, week, week_rows=None):
 HTML_TMPL = Template("""
 <!doctype html>
 <html>
-  <body style="margin:0, padding:0; background:#f5f7fb;">
+  <body style="margin:0; padding:0; background:#f5f7fb;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f5f7fb; padding:24px 0;">
       <tr>
         <td align="center">
@@ -753,19 +695,8 @@ HTML_TMPL = Template("""
             
             <!-- Header -->
             <tr>
-              <td style="background:#0f172a; color:#ffffff; padding:20px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                  <tr>
-                    <td style="vertical-align:middle;">
-                      <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
-                    </td>
-                    {% if header_img %}
-                    <td align="right" style="vertical-align:middle;">
-                      <img src="{{ header_img }}" alt="Geno header" style="display:block; height:48px; width:auto; border:0; outline:none; text-decoration:none;">
-                    </td>
-                    {% endif %}
-                  </tr>
-                </table>
+              <td style="background:#0f172a; color:#ffffff; padding:24px 28px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:22px; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
               </td>
             </tr>
 
@@ -799,7 +730,7 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
-            <!-- Upcoming Weekly Challenge (NEW) -->
+            <!-- Upcoming Weekly Challenge -->
             {% if next_challenge %}
             <tr>
               <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -814,6 +745,35 @@ HTML_TMPL = Template("""
                       </div>
                     </td>
                   </tr>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
+
+            <!-- Weekly Challenges (ALL WEEKS) -->
+            {% if weekly_challenges and weekly_challenges|length > 0 %}
+            <tr>
+              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Weekly Challenges</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Week</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Challenge</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Winner</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in weekly_challenges %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.title }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.winner }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ row.detail }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
                 </table>
               </td>
             </tr>
@@ -890,7 +850,7 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
-            <!-- Power Rankings (NEW) -->
+            <!-- Power Rankings -->
             {% if power and power|length > 0 %}
             <tr>
               <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -949,6 +909,7 @@ def main():
     season = int(SEASON) if SEASON else today.year
     week = int(WEEK) if WEEK else 1
 
+    # current week payload
     payloads = espn_fetch_jsons(LEAGUE_ID, season, week)
     scoreboard = payloads["scoreboard"]
     teams = payloads["teams"]
@@ -956,31 +917,22 @@ def main():
 
     matchups = summarize_matchups(scoreboard, teams, week)
     standings = extract_standings(teams)
-    # player/bench/positions per team for the week (best-effort)
     week_rows = build_week_stats_from_boxscore(boxscore, teams, week)
 
-    # compute Weekly Challenge per your rotation
+    # compute Weekly Challenge for current week
     challenge = compute_week_challenge(week, matchups, standings, week_rows)
 
     # NEW: compute Power Rankings & Upcoming Challenge
     power = compute_power_rankings(standings)
     next_challenge = describe_upcoming_challenge(week)
 
-    # Narrative
+    # NEW: build full Weekly Challenges table (Weeks 1–13)
+    weekly_challenges = build_weekly_challenges(season, week)
+
     narrative = build_narrative(matchups, week, week_rows)
 
     if not matchups:
         print("[WARN] No matchups found for that week/season.", file=sys.stderr)
-
-    # Load header image (Option A prefers a public RAW URL)
-    header_img = resolve_header_image()
-
-    # If it's a URL, sanity-check fetchability (and save a debug copy)
-    if isinstance(header_img, str) and header_img.startswith(("http://", "https://")):
-        ok, _, _ = verify_remote_image(header_img)
-        if not ok:
-            print("[WARN] The header image URL was not fetchable as a public image. "
-                  "Ensure it's a public RAW URL and path/casing are correct.", file=sys.stderr)
 
     html = HTML_TMPL.render(
         week=week,
@@ -990,7 +942,7 @@ def main():
         challenge=challenge,
         next_challenge=next_challenge,
         power=power,
-        header_img=header_img,
+        weekly_challenges=weekly_challenges,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     subject = f"Fantasy Week {week} Results & Notes"
