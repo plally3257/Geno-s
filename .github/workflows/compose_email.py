@@ -33,6 +33,7 @@ HEADERS = {
 
 LINEUP_SLOT_BENCH = 20  # ESPN bench slot id
 POS_QB = 0
+POS_WR = 4  # ESPN Wide Receiver position id
 POS_RB = 2
 POS_DST = 16
 POS_K = 17  # <-- used by Weekly Challenge rotation
