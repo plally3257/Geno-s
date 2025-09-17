@@ -485,7 +485,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         pa = r.get("points_against", 0)
         return ("Most points against (season)", r["name"], f"{pa} against")
 
-        def lowest_scoring_team():
+    def lowest_scoring_team():
         all_rows = []
         for m in matchups:
             all_rows.append({"team": m["home"], "pts": m["home_pts"]})
