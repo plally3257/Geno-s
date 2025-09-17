@@ -39,6 +39,7 @@ POS_DST = 16
 POS_K = 17  # <-- used by Weekly Challenge rotation
 POS_TE = 6              # Tight End position id
 LINEUP_SLOT_FLEX = 23   # ESPN RB/WR/TE FLEX lineup slot id
+LINEUP_SLOT_IR = 21  # injured reserve; not a starter
 
 # ============
 # HTTP helpers
@@ -225,13 +226,70 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
     if not isinstance(boxscore, dict):
         return None
 
-    LINEUP_SLOT_BENCH = 20  # keep local in case constants move
     team_map = {t.get("id"): _team_display_name(t) for t in (teams or []) if t.get("id") is not None}
     rows = []
+    wk = int(week)
+
+    def _extract_points(e, ppe, player, wk):
+        # 1) Entry-level totals
+        for k in ("appliedStatTotal", "appliedTotal", "points", "totalPoints"):
+            v = e.get(k)
+            if isinstance(v, (int, float)):
+                return float(v)
+        # 2) PlayerPoolEntry-level totals
+        if isinstance(ppe, dict):
+            for k in ("appliedStatTotal", "appliedTotal", "points", "totalPoints"):
+                v = ppe.get(k)
+                if isinstance(v, (int, float)):
+                    return float(v)
+        # 3) Player.stats for this scoring period (statSourceId 0 = actuals)
+        stats = (player or {}).get("stats")
+        if isinstance(stats, list):
+            for st in stats:
+                try:
+                    if int(st.get("scoringPeriodId")) == wk and st.get("statSourceId") in (0,):
+                        val = st.get("appliedTotal") or st.get("appliedStatTotal") or st.get("points")
+                        if isinstance(val, (int, float)):
+                            return float(val)
+                except Exception:
+                    continue
+        # 4) Sum appliedStats as a last resort
+        apps = e.get("appliedStats")
+        if isinstance(apps, dict):
+            total = 0.0
+            any_num = False
+            for v in apps.values():
+                if isinstance(v, (int, float)):
+                    total += float(v)
+                    any_num = True
+            if any_num:
+                return total
+        return 0.0
+
+    def _extract_proj(e, ppe, wk_key):
+        # Try entry.ratings[wk] and ppe.ratings[wk]
+        ratings = e.get("ratings")
+        if isinstance(ratings, dict):
+            rW = ratings.get(wk_key) or ratings.get("0") or {}
+            for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
+                if isinstance(rW.get(k), (int, float)):
+                    return float(rW[k])
+        pr = ppe.get("ratings") if isinstance(ppe, dict) else None
+        if isinstance(pr, dict):
+            rW = pr.get(wk_key) or pr.get("0") or {}
+            for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
+                if isinstance(rW.get(k), (int, float)):
+                    return float(rW[k])
+        # Common direct fields
+        for k in ("projectedPoints", "projectedTotal", "pointsProjected"):
+            v = e.get(k)
+            if isinstance(v, (int, float)):
+                return float(v)
+        return None
 
     def parse_entries(e_list):
         out = []
-        wk_key = str(week)
+        wk_key = str(wk)
         for e in (e_list or []):
             try:
                 ppe = e.get("playerPoolEntry", {}) if isinstance(e, dict) else {}
@@ -239,32 +297,9 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                 full = player.get("fullName") or player.get("name") or "Player"
                 posId = player.get("defaultPositionId")
                 slotId = e.get("lineupSlotId")
-                pts = e.get("appliedStatTotal")
-                if not isinstance(pts, (int, float)):
-                    pts = e.get("appliedTotal")
-                if not isinstance(pts, (int, float)):
-                    pts = 0.0
 
-                # Heuristics for projected points
-                proj = None
-                ratings = e.get("ratings")
-                if isinstance(ratings, dict):
-                    rW = ratings.get(wk_key) or ratings.get("0") or {}
-                    for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
-                        if isinstance(rW.get(k), (int, float)):
-                            proj = float(rW[k]); break
-                if proj is None and isinstance(ppe, dict):
-                    pr = ppe.get("ratings")
-                    if isinstance(pr, dict):
-                        rW = pr.get(wk_key) or pr.get("0") or {}
-                        for k in ("totalProjection", "totalProjectedPoints", "totalProjectPoints", "totalProjectionPoints"):
-                            if isinstance(rW.get(k), (int, float)):
-                                proj = float(rW[k]); break
-                if proj is None:
-                    for k in ("projectedPoints", "projectedTotal", "pointsProjected"):
-                        v = e.get(k)
-                        if isinstance(v, (int, float)):
-                            proj = float(v); break
+                pts = _extract_points(e, ppe, player, wk)
+                proj = _extract_proj(e, ppe, wk_key)
 
                 out.append({
                     "name": full,
@@ -284,7 +319,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         return (r or {}).get("entries") or []
 
     for m in (boxscore.get("schedule") or []):
-        if m.get("matchupPeriodId") != int(week):
+        if m.get("matchupPeriodId") != wk:
             continue
         home = m.get("home") or {}
         away = m.get("away") or {}
@@ -293,11 +328,12 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         h_entries = parse_entries(_safe_entries(home))
         a_entries = parse_entries(_safe_entries(away))
 
-        LINEUP_SLOT_BENCH = 20
-        h_starters = [x for x in h_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
-        h_bench    = [x for x in h_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
-        a_starters = [x for x in a_entries if x.get("slotId") != LINEUP_SLOT_BENCH]
-        a_bench    = [x for x in a_entries if x.get("slotId") == LINEUP_SLOT_BENCH]
+        # Starters = not Bench and not IR
+        EXCLUDE = {LINEUP_SLOT_BENCH, LINEUP_SLOT_IR}
+        h_starters = [x for x in h_entries if x.get("slotId") not in EXCLUDE]
+        h_bench    = [x for x in h_entries if x.get("slotId") in EXCLUDE]
+        a_starters = [x for x in a_entries if x.get("slotId") not in EXCLUDE]
+        a_bench    = [x for x in a_entries if x.get("slotId") in EXCLUDE]
 
         hpts = float(home.get("totalPoints", 0) or 0)
         apts = float(away.get("totalPoints", 0) or 0)
