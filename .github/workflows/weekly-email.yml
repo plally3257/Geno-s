@@ -29,7 +29,8 @@ jobs:
       RECIPIENTS: ${{ secrets.RECIPIENTS }}
       WEEK: ${{ inputs.week }}
       SEND_MODE: ${{ inputs.mode }}
-      SEASON: "2025"
+      # SEASON is optional—omit or set it like this:
+      # SEASON: ${{ vars.SEASON }}
 
       # 👇 NEW: public RAW image URL (must be publicly accessible, no token/query)
       HEADER_IMG_URL: "https://raw.githubusercontent.com/plally3257/Geno-s/main/assets/genosmith.PNG"
