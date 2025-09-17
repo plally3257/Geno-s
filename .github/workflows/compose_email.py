@@ -362,7 +362,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         if not best: return None
         return ("Highest scoring player (starter, D/ST incl.)", best["team"], f"{best['player']} — {best['points']} pts")
 
-    def team_with_lowest_scoring_bench_player():
+    def team_with_highest_scoring_bench_player():
         if not week_rows: return None
         worst = None
         for r in week_rows:
@@ -486,7 +486,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
     mapping = {
         1:  highest_scoring_team,
         2:  team_with_highest_scoring_player_starters_incl_dst,
-        3:  team_with_lowest_scoring_bench_player,
+        3:  team_with_highest_scoring_bench_player,
         4:  smallest_margin_of_victory,
         5:  widest_margin_of_victory,
         6:  highest_scoring_starting_k,
