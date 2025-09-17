@@ -791,15 +791,28 @@ HTML_TMPL = Template("""
         <td align="center">
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px; max-width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
     
-            <!-- Header -->
-            <tr>
-              <td style="background:#0f172a; color:#ffffff; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
-                {% if logo_url %}
-                  <img src="{{ logo_url }}" alt="Geno's Weekly" style="display:block; max-height:48px; margin:0; border:0; outline:none;">
-                {% endif %}
-                <div style="font-size:22px; font-weight:700; letter-spacing:.3px; margin-top:6px;">Geno's Weekly</div>
-              </td>
-            </tr>
+<!-- Header -->
+<tr>
+  <td style="background:#0f172a; color:#ffffff; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <!-- Left: Title -->
+        <td style="vertical-align:middle; text-align:left;">
+          <div style="font-size:22px; line-height:1.1; font-weight:700; letter-spacing:.3px; color:#ffffff;">
+            Geno's Weekly
+          </div>
+        </td>
+        <!-- Right: Logo -->
+        <td style="vertical-align:middle; text-align:right; white-space:nowrap;">
+          {% if logo_url %}
+            <img src="{{ logo_url }}" alt="Geno's Weekly" 
+                 style="display:block; height:48px; max-width:180px; border:0; outline:none;">
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
 
             <!-- Narrative -->
             <tr>
