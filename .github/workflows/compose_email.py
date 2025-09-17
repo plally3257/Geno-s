@@ -529,7 +529,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
     mapping = {
         1:  highest_scoring_team,
         2:  team_with_highest_scoring_player_starters_incl_dst,
-        3:  team_with_lowest_scoring_bench_player,
+        3:  team_with_highest_scoring_bench_player,
         4:  smallest_margin_of_victory,
         5:  widest_margin_of_victory,
         6:  highest_scoring_starting_k,
@@ -567,7 +567,7 @@ def get_challenge_title_by_week(week:int) -> str | None:
     titles = {
         1:  "Highest scoring team",
         2:  "Highest scoring player (starter, D/ST incl.)",
-        3:  "Lowest scoring bench player",
+        3:  "Highest scoring bench player",
         4:  "Smallest margin of victory",
         5:  "Widest margin of victory",
         6:  "Highest scoring starting K",
