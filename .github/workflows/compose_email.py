@@ -371,7 +371,7 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
                 if worst is None or pts < worst["points"]:
                     worst = {"team": r["team"], "player": p.get("name","Player"), "points": pts}
         if not worst: return None
-        return ("Lowest scoring bench player", worst["team"], f"{worst['player']} — {worst['points']} pts")
+        return ("Highest scoring bench player", worst["team"], f"{worst['player']} — {worst['points']} pts")
 
     def smallest_margin_of_victory():
         winners = [m for m in matchups if m["winner"] in ("home","away")]
@@ -520,7 +520,7 @@ def get_challenge_title_by_week(week:int) -> str | None:
     titles = {
         1:  "Highest scoring team",
         2:  "Highest scoring player (starter, D/ST incl.)",
-        3:  "Lowest scoring bench player",
+        3:  "Highest scoring bench player",
         4:  "Smallest margin of victory",
         5:  "Widest margin of victory",
         6:  "Highest scoring starting K",
