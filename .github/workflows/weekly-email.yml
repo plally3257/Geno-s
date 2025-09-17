@@ -1,4 +1,3 @@
-# .github/workflows/fantasy-weekly-email.yml  (example name)
 name: Fantasy Weekly Email
 
 on:
