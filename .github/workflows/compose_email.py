@@ -36,6 +36,8 @@ POS_QB = 0
 POS_RB = 2
 POS_DST = 16
 POS_K = 17  # <-- used by Weekly Challenge rotation
+POS_TE = 6              # Tight End position id
+LINEUP_SLOT_FLEX = 23   # ESPN RB/WR/TE FLEX lineup slot id
 
 # ============
 # HTTP helpers
@@ -483,10 +485,51 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         pa = r.get("points_against", 0)
         return ("Most points against (season)", r["name"], f"{pa} against")
 
+        def lowest_scoring_team():
+        all_rows = []
+        for m in matchups:
+            all_rows.append({"team": m["home"], "pts": m["home_pts"]})
+            all_rows.append({"team": m["away"], "pts": m["away_pts"]})
+        if not all_rows: return None
+        row = min(all_rows, key=lambda r: r["pts"])
+        return ("Lowest weekly score", row["team"], f"{row['pts']} pts")
+
+    def highest_scoring_flex():
+        if not week_rows: return None
+        best = None
+        for r in week_rows:
+            for p in (r.get("starters") or []):
+                if p.get("slotId") == LINEUP_SLOT_FLEX:
+                    pts = p.get("points", 0)
+                    if best is None or pts > best["points"]:
+                        best = {"team": r["team"], "player": p.get("name","FLEX"), "points": pts}
+        if not best: return None
+        return ("Highest scoring FLEX", best["team"], f"{best['player']} — {best['points']} pts")
+
+    def highest_scoring_te():
+        if not week_rows: return None
+        best = None
+        for r in week_rows:
+            for p in (r.get("starters") or []):
+                if p.get("posId") == POS_TE:
+                    pts = p.get("points", 0)
+                    if best is None or pts > best["points"]:
+                        best = {"team": r["team"], "player": p.get("name","TE"), "points": pts}
+        if not best: return None
+        return ("Highest scoring TE", best["team"], f"{best['player']} — {best['points']} pts")
+
+    def first_team_out_overall():
+        # 7th-place team in current standings (list already sorted in extract_standings)
+        if not standings or len(standings) < 7:
+            return None
+        t = standings[6]
+        rec = f"{t['wins']}-{t['losses']}" + (f"-{t['ties']}" if t.get("ties") else "")
+        return ("First Team Out", t["name"], f"7th place • {rec}, PF {t['points_for']}")
+
     mapping = {
         1:  highest_scoring_team,
         2:  team_with_highest_scoring_player_starters_incl_dst,
-        3:  team_with_highest_scoring_bench_player,
+        3:  team_with_lowest_scoring_bench_player,
         4:  smallest_margin_of_victory,
         5:  widest_margin_of_victory,
         6:  highest_scoring_starting_k,
@@ -497,6 +540,10 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         11: highest_combined_starting_rb_points_incl_flex,
         12: team_closest_to_projected_total,
         13: most_points_against_cumulative,
+        14: lowest_scoring_team,          # NEW
+        15: highest_scoring_flex,         # NEW
+        16: highest_scoring_te,           # NEW
+        17: first_team_out_overall,       # NEW (Week 17 = 7th place)
     }
 
     fn = mapping.get(int(week))
@@ -520,7 +567,7 @@ def get_challenge_title_by_week(week:int) -> str | None:
     titles = {
         1:  "Highest scoring team",
         2:  "Highest scoring player (starter, D/ST incl.)",
-        3:  "Highest scoring bench player",
+        3:  "Lowest scoring bench player",
         4:  "Smallest margin of victory",
         5:  "Widest margin of victory",
         6:  "Highest scoring starting K",
@@ -531,6 +578,10 @@ def get_challenge_title_by_week(week:int) -> str | None:
         11: "Highest combined starting RB points",
         12: "Closest to projected total",
         13: "Most points against (season)",
+        14: "Lowest weekly score",          # NEW
+        15: "Highest scoring FLEX",         # NEW
+        16: "Highest scoring TE",           # NEW
+        17: "First Team Out",               # NEW
     }
     return titles.get(int(week))
 
@@ -579,7 +630,7 @@ def compute_power_rankings(standings: list[dict]) -> list[dict]:
 # NEW: Build full Weekly Challenges section
 # =========================================
 
-MAX_CHALLENGE_WEEK = 13  # rotation covers weeks 1–13
+MAX_CHALLENGE_WEEK = 17  # rotation covers weeks 1–17
 
 def _fetch_week_bits(season:int, week:int):
     """Fetch scoreboard/teams/box + transform for a given week."""
