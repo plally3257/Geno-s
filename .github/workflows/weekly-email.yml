@@ -1,5 +1,5 @@
 name: Fantasy Weekly Email
-
+run-name: "Fantasy Week ${{ inputs.week || 'N/A' }} • ${{ github.ref_name }}"
 on:
   workflow_dispatch:
     inputs:
