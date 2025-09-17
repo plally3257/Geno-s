@@ -750,36 +750,7 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
-            <!-- Weekly Challenges (ALL WEEKS) -->
-            {% if weekly_challenges and weekly_challenges|length > 0 %}
-            <tr>
-              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Weekly Challenges</div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
-                  <thead>
-                    <tr style="background:#f1f5f9;">
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Week</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Challenge</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Winner</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in weekly_challenges %}
-                    <tr>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.title }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.winner }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ row.detail }}</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
-            {% endif %}
-
-            <!-- Matchups -->
+                       <!-- Matchups -->
             <tr>
               <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Matchups & Results</div>
@@ -884,6 +855,34 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
+   <!-- Weekly Challenges (ALL WEEKS) -->
+            {% if weekly_challenges and weekly_challenges|length > 0 %}
+            <tr>
+              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Weekly Challenges</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Week</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Challenge</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Winner</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in weekly_challenges %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.title }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.winner }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ row.detail }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
             <!-- Footer -->
             <tr>
               <td style="padding:18px 24px 26px 24px; font-family:Arial, Helvetica, sans-serif; color:#94a3b8; font-size:12px; text-align:center;">
