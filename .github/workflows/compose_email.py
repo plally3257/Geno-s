@@ -42,9 +42,13 @@ LINEUP_SLOT_FLEX = 23   # ESPN RB/WR/TE FLEX lineup slot id
 LINEUP_SLOT_IR = 21  # injured reserve; not a starter
 
 # Logo config (hosted URL)
-LOGO_URL = os.environ.get("LOGO_URL")
+LOGO_URL = (
+    os.environ.get("HEADER_IMG_URL")  # preferred (matches your workflow echo)
+    or os.environ.get("LOGO_URL")     # backward compat
+)
+
 if not LOGO_URL:
-    # Auto-build a GitHub raw URL if running in Actions and file at assets/genosmith.PNG
+    # Auto-build a GitHub raw URL if running in Actions
     _repo = os.environ.get("GITHUB_REPOSITORY")  # "owner/repo"
     _branch = os.environ.get("GITHUB_REF_NAME", "main")
     _path = os.environ.get("LOGO_PATH", "assets/genosmith.PNG")
