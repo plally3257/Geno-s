@@ -213,6 +213,48 @@ def extract_standings(teams):
     rows.sort(key=lambda r: (r["wins"], r["points_for"]), reverse=True)
     return rows
 
+def compute_waiver_order(teams: list[dict], standings: list[dict]) -> list[dict]:
+    """
+    Returns a list of {rank:int, name:str}. Tries to use ESPN's waiver priority
+    from team objects; if unavailable, falls back to inverse standings
+    (wins asc, points_for asc) as an approximation.
+    """
+    if not teams:
+        return []
+
+    def team_name(t): 
+        return _team_display_name(t)
+
+    def get_priority(t):
+        # Try the common ESPN fields
+        for k in ("waiverRank", "waiverPriority", "waiverOrder", "acquisitionOrder"):
+            v = t.get(k)
+            if isinstance(v, (int, float)):
+                return int(v)
+        return None
+
+    # 1) If ESPN provides a waiver priority, use it (1 = highest)
+    pri_rows = []
+    for t in teams:
+        pri = get_priority(t)
+        if pri is not None:
+            pri_rows.append({"name": team_name(t), "priority": pri})
+    if pri_rows and len(pri_rows) >= max(1, len(teams) // 2):
+        pri_rows.sort(key=lambda r: r["priority"])
+        for i, r in enumerate(pri_rows, start=1):
+            r["rank"] = i
+        # Normalize to only rank/name for the template
+        return [{"rank": r["rank"], "name": r["name"]} for r in pri_rows]
+
+    # 2) Fallback: inverse of standings (lower wins, then lower PF first)
+    if standings:
+        inv = sorted(standings, key=lambda r: (r["wins"], r["points_for"]))
+        return [{"rank": i, "name": r["name"]} for i, r in enumerate(inv, start=1)]
+
+    # 3) Last resort: alphabetical
+    alpha = sorted([team_name(t) for t in teams])
+    return [{"rank": i, "name": nm} for i, nm in enumerate(alpha, start=1)]
+
 # ==========================
 # Build week/player details
 # ==========================
@@ -996,6 +1038,33 @@ HTML_TMPL = Template("""
               </td>
             </tr>
             {% endif %}
+            
+<!-- Waiver Order -->
+{% if waiver and waiver|length > 0 %}
+<tr>
+  <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+    <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Waiver Wire Order (Next Week)</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">#</th>
+          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in waiver %}
+        <tr>
+          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ w.rank }}</td>
+          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ w.name }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="font-size:11px; color:#94a3b8; margin-top:6px;">If your league uses rolling waivers or FAAB, this reflects the current priority. Otherwise it’s the inverse of standings.</div>
+  </td>
+</tr>
+{% endif %}
+            
             <!-- Footer -->
             <tr>
               <td style="padding:18px 24px 26px 24px; font-family:Arial, Helvetica, sans-serif; color:#94a3b8; font-size:12px; text-align:center;">
@@ -1041,6 +1110,8 @@ def main():
     # NEW: build full Weekly Challenges table (Weeks 1–13)
     weekly_challenges = build_weekly_challenges(season, week)
 
+    waiver = compute_waiver_order(teams, standings)
+
     narrative = build_narrative(matchups, week, week_rows)
 
     if not matchups:
@@ -1055,6 +1126,7 @@ def main():
         next_challenge=next_challenge,
         power=power,
         weekly_challenges=weekly_challenges,
+        waiver=waiver,                # <— NEW
         logo_url=LOGO_URL,            # <— LOGO
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
