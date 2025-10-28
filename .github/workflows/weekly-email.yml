@@ -105,6 +105,10 @@ jobs:
       - name: Compose email from ESPN (show full traceback)
         run: python .github/workflows/compose_email.py
 
+        # Install requirements
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Create Draft or Send (show full traceback)
         run: python .github/workflows/gmail_send.py
 
