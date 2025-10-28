@@ -51,6 +51,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Python dependencies
+        run: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib packaging
+
       - name: Install deps (auto-detect requirements.txt)
         run: |
           if [ -f requirements.txt ]; then
