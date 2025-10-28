@@ -1064,39 +1064,6 @@ HTML_TMPL = Template("""
   </td>
 </tr>
 {% endif %}
-
-<!-- Trade Activity -->
-{% if trades is defined %}
-<tr>
-  <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
-    <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Trade Activity</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
-      <thead>
-        <tr style="background:#f1f5f9;">
-          <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Teams</th>
-          <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Trade Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if trades and trades|length > 0 %}
-          {% for t in trades %}
-          <tr>
-            <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ t.teams }}</td>
-            <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ t.details }}</td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td colspan="2" style="padding:8px 10px; font-size:13px; color:#64748b; border-bottom:1px solid #e5e7eb;">
-              No trades were recorded this week.
-            </td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
-  </td>
-</tr>
-{% endif %}
             
             <!-- Footer -->
             <tr>
@@ -1113,7 +1080,6 @@ HTML_TMPL = Template("""
   </body>
 </html>
 """.strip())
-
 
 # =====
 # Main
