@@ -212,6 +212,123 @@ def extract_standings(teams):
         rows.append({"name": name, "wins": wins, "losses": losses, "ties": ties, "points_for": pf, "points_against": round(pa, 2)})
     rows.sort(key=lambda r: (r["wins"], r["points_for"]), reverse=True)
     return rows
+	
+def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
+    """
+    Pulls the *actual* ESPN playoff schedule (winners & consolation brackets)
+    using the mMatchup view, and returns rows for the email template.
+
+    Each row:
+      {round, tier, team1, team2, score, status}
+    """
+    import requests
+
+    cookies = {"espn_s2": ESPN_S2, "SWID": SWID}
+    s = requests.Session()
+    s.headers.update(HEADERS)
+
+    # Full season schedule with playoff metadata
+    base = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{season}/segments/0/leagues/{LEAGUE_ID}"
+    r = _try_fetch(s, base, {"view": "mMatchup"}, cookies)
+    if r.status_code != 200:
+        return []
+
+    data = r.json() or {}
+    schedule = data.get("schedule") or []
+    if not schedule:
+        return []
+
+    team_map = {t.get("id"): _team_display_name(t) for t in (teams or []) if t.get("id") is not None}
+
+    playoff_games = []
+    for m in schedule:
+        tier = m.get("playoffTierType")
+        if not tier or str(tier).upper() == "NONE":
+            # Regular-season games won't have playoffTierType
+            continue
+
+        home = m.get("home") or {}
+        away = m.get("away") or {}
+        hid = home.get("teamId")
+        aid = away.get("teamId")
+        if hid is None or aid is None:
+            continue
+
+        round_id = m.get("playoffMatchupPeriodId") or m.get("matchupPeriodId")
+        if round_id is None:
+            continue
+
+        home_pts = float(home.get("totalPoints", 0) or 0)
+        away_pts = float(away.get("totalPoints", 0) or 0)
+        winner_flag = (m.get("winner") or "").upper()
+
+        if winner_flag == "HOME" and home_pts != away_pts:
+            status = "Final"
+        elif winner_flag == "AWAY" and home_pts != away_pts:
+            status = "Final"
+        elif home_pts == 0 and away_pts == 0:
+            status = "Not started"
+        else:
+            status = "In progress"
+
+        playoff_games.append({
+            "round_id": int(round_id),
+            "tier_raw": str(tier),
+            "team1": team_map.get(hid, f"Team {hid}"),
+            "team2": team_map.get(aid, f"Team {aid}"),
+            "home_pts": home_pts,
+            "away_pts": away_pts,
+            "status": status,
+        })
+
+    if not playoff_games:
+        return []
+
+    # Map round IDs to nice labels (Quarterfinals / Semis / Final)
+    round_ids = sorted({g["round_id"] for g in playoff_games})
+    round_labels = {}
+    n_rounds = len(round_ids)
+    for idx, rid in enumerate(round_ids, start=1):
+        if n_rounds == 3:
+            names = {1: "Quarterfinals", 2: "Semifinals", 3: "Final"}
+        elif n_rounds == 2:
+            names = {1: "Semifinals", 2: "Final"}
+        else:
+            names = {1: "Final"}
+        round_labels[rid] = names.get(idx, f"Round {idx}")
+
+    def tier_label(tier_raw: str) -> str:
+        t = tier_raw.upper()
+        if "WINNER" in t:
+            return "Championship (Winners Bracket)"
+        if "LOSER" in t or "CONS" in t:
+            return "Consolation"
+        return tier_raw
+
+    # Build rows for template
+    rows = []
+    for g in playoff_games:
+        score = ""
+        if g["home_pts"] or g["away_pts"]:
+            score = f"{g['team2']} {g['away_pts']:.1f} – {g['team1']} {g['home_pts']:.1f}"
+
+        rows.append({
+            "round": round_labels.get(g["round_id"], f"Round {g['round_id']}"),
+            "tier": tier_label(g["tier_raw"]),
+            "team1": g["team1"],
+            "team2": g["team2"],
+            "score": score,
+            "status": g["status"],
+            "_round_order": g["round_id"],
+            "_tier_order": 0 if "Championship" in tier_label(g["tier_raw"]) else 1,
+        })
+
+    rows.sort(key=lambda x: (x["_round_order"], x["_tier_order"], x["team1"]))
+    # Strip private sort keys before returning
+    for r in rows:
+        r.pop("_round_order", None)
+        r.pop("_tier_order", None)
+    return rows
 
 def compute_waiver_order(teams: list[dict], standings: list[dict]) -> list[dict]:
     """
@@ -948,6 +1065,49 @@ HTML_TMPL = Template("""
                 {% endif %}
               </td>
             </tr>
+			
+          <!-- Playoffs -->
+{% if playoff_bracket and playoff_bracket|length > 0 %}
+<tr>
+  <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+    <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:8px;">
+      Playoff Bracket
+    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="border-collapse:collapse; border:1px solid #e5e7eb;">
+      <thead>
+        <tr style="background:#f1f5f9;">
+          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Round</th>
+          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Matchup</th>
+          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Score / Status</th>
+          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Bracket</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in playoff_bracket %}
+        <tr>
+          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+            {{ g.round }}
+          </td>
+          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+            {{ g.team1 }} vs {{ g.team2 }}
+          </td>
+          <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
+            {% if g.score %}{{ g.score }} – {{ g.status }}{% else %}{{ g.status }}{% endif %}
+          </td>
+          <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
+            {{ g.tier }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+      Pulled directly from ESPN’s live playoff schedule (winners + consolation).
+    </div>
+  </td>
+</tr>
+{% endif %}
 
             <!-- Standings -->
  {% if standings and standings|length > 0 %}
@@ -1111,6 +1271,9 @@ def main():
     weekly_challenges = build_weekly_challenges(season, week)
 
     waiver = compute_waiver_order(teams, standings)
+	
+	# NEW: real ESPN playoff bracket
+	playoff_bracket = build_real_playoff_bracket(season, teams)
 
     narrative = build_narrative(matchups, week, week_rows)
 
@@ -1126,7 +1289,8 @@ def main():
         next_challenge=next_challenge,
         power=power,
         weekly_challenges=weekly_challenges,
-        waiver=waiver,                # <— NEW
+        waiver=waiver,               
+		playoff_bracket=playoff_bracket,   # ⬅️ NEW
         logo_url=LOGO_URL,            # <— LOGO
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     )
