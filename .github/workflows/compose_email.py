@@ -1271,8 +1271,7 @@ def main():
     weekly_challenges = build_weekly_challenges(season, week)
 
     waiver = compute_waiver_order(teams, standings)
-	
-	# NEW: real ESPN playoff bracket
+		
 	playoff_bracket = build_real_playoff_bracket(season, teams)
 
     narrative = build_narrative(matchups, week, week_rows)
