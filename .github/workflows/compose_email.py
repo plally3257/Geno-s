@@ -341,6 +341,43 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
         r.pop("_tier_order", None)
     return rows
 
+def build_playoff_preview_from_standings(standings: list[dict], num_seeds: int = 6) -> list[dict]:
+    """
+    Build a projected playoff bracket from current standings when ESPN
+    has not yet created official playoff matchups.
+
+    Returns rows shaped like build_real_playoff_bracket:
+      {round, tier, team1, team2, score, status}
+    """
+    if not standings or len(standings) < num_seeds:
+        return []
+
+    seeds = standings[:num_seeds]
+
+    # Simple 6-team bracket:
+    #  1 vs 6
+    #  2 vs 5
+    #  3 vs 4
+    pairs = [
+        (1, 6, "Quarterfinals"),
+        (2, 5, "Quarterfinals"),
+        (3, 4, "Quarterfinals"),
+    ]
+
+    rows = []
+    for s1, s2, round_name in pairs:
+        t1 = seeds[s1 - 1]["name"]
+        t2 = seeds[s2 - 1]["name"]
+        rows.append({
+            "round": round_name,
+            "tier": "Projected (Not Official)",
+            "team1": t1,
+            "team2": t2,
+            "score": "",
+            "status": "Projected matchup",
+        })
+    return rows
+
 def compute_waiver_order(teams: list[dict], standings: list[dict]) -> list[dict]:
     """
     Returns a list of {rank:int, name:str}. Tries to use ESPN's waiver priority
@@ -1138,7 +1175,11 @@ HTML_TMPL = Template("""
       </tbody>
     </table>
     <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+      {% if playoff_bracket[0].tier.startswith('Projected') %}
+      Projected based on current standings (not an official ESPN bracket).
+      {% else %}
       Pulled directly from ESPN’s live playoff schedule (winners + consolation).
+      {% endif %}
     </div>
   </td>
 </tr>
@@ -1307,15 +1348,20 @@ def main():
 
     waiver = compute_waiver_order(teams, standings)
 
-        # NEW: real ESPN playoff bracket (only once playoffs start)
-    if week >= 14:  # adjust if your league starts playoffs a different week
-        try:
-            playoff_bracket = build_real_playoff_bracket(season, teams)
-        except Exception as e:
-            print(f"[WARN] Playoff bracket fetch failed: {e}", file=sys.stderr)
-            playoff_bracket = []
-    else:
+    # NEW: playoff bracket
+    # 1) Try real ESPN playoff bracket (if available)
+    playoff_bracket: list[dict] = []
+    try:
+        playoff_bracket = build_real_playoff_bracket(season, teams)
+    except Exception as e:
+        print(f"[WARN] Playoff bracket fetch failed: {e}", file=sys.stderr)
         playoff_bracket = []
+
+    # 2) If there is still no data (regular season / pre-playoffs),
+    #    build a projected bracket from current standings so you can
+    #    see it in draft emails.
+    if (not playoff_bracket) and standings and len(standings) >= 6:
+        playoff_bracket = build_playoff_preview_from_standings(standings)
 
     narrative = build_narrative(matchups, week, week_rows)
 
