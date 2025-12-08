@@ -92,7 +92,7 @@ def espn_fetch_jsons(league_id, season, week):
         print(f"[INFO] Trying scoreboard host: {host}")
         for i in range(3):
             r = _try_fetch(s, host, {"view": "mMatchupScore", "scoringPeriodId": str(week)}, cookies)
-            if r.status_code == 200 and r.headers.get("Content-Type","").lower().startswith("application/json"):
+            if r.status_code == 200 and r.headers.get("Content-Type", "").lower().startswith("application/json"):
                 out["scoreboard"] = r.json()
                 break
             time.sleep(1 + i)
@@ -107,7 +107,7 @@ def espn_fetch_jsons(league_id, season, week):
         for host in hosts:
             print(f"[INFO] Fetching teams via mTeam: {host}")
             r = _try_fetch(s, host, {"view": "mTeam"}, cookies)
-            if r.status_code == 200 and r.headers.get("Content-Type","").lower().startswith("application/json"):
+            if r.status_code == 200 and r.headers.get("Content-Type", "").lower().startswith("application/json"):
                 out["teams"] = r.json().get("teams", [])
                 break
     else:
@@ -117,7 +117,7 @@ def espn_fetch_jsons(league_id, season, week):
     for host in hosts:
         print(f"[INFO] Fetching boxscore via mMatchup: {host}")
         r = _try_fetch(s, host, {"view": "mMatchup", "scoringPeriodId": str(week)}, cookies)
-        if r.status_code == 200 and r.headers.get("Content-Type","").lower().startswith("application/json"):
+        if r.status_code == 200 and r.headers.get("Content-Type", "").lower().startswith("application/json"):
             out["boxscore"] = r.json()
             break
 
@@ -147,7 +147,7 @@ def summarize_matchups(scoreboard, teams, week):
 
     matchups = []
     for m in (scoreboard.get("schedule") or []):
-        if m.get("matchupPeriodId") != int(week): 
+        if m.get("matchupPeriodId") != int(week):
             continue
         if "away" not in m or "home" not in m:
             continue
@@ -195,13 +195,16 @@ def extract_standings(teams):
 
     def get_points_for(t: dict) -> float:
         pf = t.get("points")
-        if isinstance(pf, (int, float)): return float(pf)
+        if isinstance(pf, (int, float)):
+            return float(pf)
         if isinstance(pf, dict):
             val = pf.get("scored")
-            if isinstance(val, (int, float)): return float(val)
+            if isinstance(val, (int, float)):
+                return float(val)
         vbs = t.get("valuesByStat") or {}
         stat0 = vbs.get("0")
-        if isinstance(stat0, (int, float)): return float(stat0)
+        if isinstance(stat0, (int, float)):
+            return float(stat0)
         return 0.0
 
     rows = []
@@ -209,10 +212,17 @@ def extract_standings(teams):
         name = _team_display_name(t)
         wins, losses, ties, pa = get_record_fields(t)
         pf = round(get_points_for(t), 2)
-        rows.append({"name": name, "wins": wins, "losses": losses, "ties": ties, "points_for": pf, "points_against": round(pa, 2)})
+        rows.append({
+            "name": name,
+            "wins": wins,
+            "losses": losses,
+            "ties": ties,
+            "points_for": pf,
+            "points_against": round(pa, 2),
+        })
     rows.sort(key=lambda r: (r["wins"], r["points_for"]), reverse=True)
     return rows
-	
+
 def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
     """
     Pulls the *actual* ESPN playoff schedule (winners & consolation brackets)
@@ -312,15 +322,16 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
         if g["home_pts"] or g["away_pts"]:
             score = f"{g['team2']} {g['away_pts']:.1f} – {g['team1']} {g['home_pts']:.1f}"
 
+        label = tier_label(g["tier_raw"])
         rows.append({
             "round": round_labels.get(g["round_id"], f"Round {g['round_id']}"),
-            "tier": tier_label(g["tier_raw"]),
+            "tier": label,
             "team1": g["team1"],
             "team2": g["team2"],
             "score": score,
             "status": g["status"],
             "_round_order": g["round_id"],
-            "_tier_order": 0 if "Championship" in tier_label(g["tier_raw"]) else 1,
+            "_tier_order": 0 if "Championship" in label else 1,
         })
 
     rows.sort(key=lambda x: (x["_round_order"], x["_tier_order"], x["team1"]))
@@ -339,7 +350,7 @@ def compute_waiver_order(teams: list[dict], standings: list[dict]) -> list[dict]
     if not teams:
         return []
 
-    def team_name(t): 
+    def team_name(t):
         return _team_display_name(t)
 
     def get_priority(t):
@@ -482,7 +493,7 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
                 continue
         return out
 
-    def _safe_entries(side):
+    def _safe_entries_local(side):
         if not isinstance(side, dict):
             return []
         r = side.get("rosterForCurrentScoringPeriod") or side.get("rosterForMatchupPeriod")
@@ -495,15 +506,15 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
         away = m.get("away") or {}
         hid, aid = home.get("teamId"), away.get("teamId")
 
-        h_entries = parse_entries(_safe_entries(home))
-        a_entries = parse_entries(_safe_entries(away))
+        h_entries = parse_entries(_safe_entries_local(home))
+        a_entries = parse_entries(_safe_entries_local(away))
 
         # Starters = not Bench and not IR
         EXCLUDE = {LINEUP_SLOT_BENCH, LINEUP_SLOT_IR}
         h_starters = [x for x in h_entries if x.get("slotId") not in EXCLUDE]
-        h_bench    = [x for x in h_entries if x.get("slotId") in EXCLUDE]
+        h_bench = [x for x in h_entries if x.get("slotId") in EXCLUDE]
         a_starters = [x for x in a_entries if x.get("slotId") not in EXCLUDE]
-        a_bench    = [x for x in a_entries if x.get("slotId") in EXCLUDE]
+        a_bench = [x for x in a_entries if x.get("slotId") in EXCLUDE]
 
         hpts = float(home.get("totalPoints", 0) or 0)
         apts = float(away.get("totalPoints", 0) or 0)
@@ -543,10 +554,10 @@ def build_week_stats_from_boxscore(boxscore, teams, week):
 # Weekly challenge logic
 # ======================
 
-def compute_week_challenge(week:int, matchups, standings, week_rows):
+def compute_week_challenge(week: int, matchups, standings, week_rows):
     """
     Returns dict {title:'Weekly Challenge Winner', winner:'Team ...', detail:'...'} or None.
-    Implements your updated rotation for Weeks 1–13.
+    Implements your updated rotation for Weeks 1–17.
     """
 
     # --- helpers reused across weeks ---
@@ -556,68 +567,79 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         for m in matchups:
             all_rows.append({"team": m["home"], "pts": m["home_pts"]})
             all_rows.append({"team": m["away"], "pts": m["away_pts"]})
-        if not all_rows: return None
+        if not all_rows:
+            return None
         row = max(all_rows, key=lambda r: r["pts"])
         return ("Highest scoring team", row["team"], f"{row['pts']} pts")
 
     def team_with_highest_scoring_player_starters_incl_dst():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
                 pts = p.get("points", 0)
                 if best is None or pts > best["points"]:
-                    best = {"team": r["team"], "player": p.get("name","Player"), "points": pts}
-        if not best: return None
+                    best = {"team": r["team"], "player": p.get("name", "Player"), "points": pts}
+        if not best:
+            return None
         return ("Highest scoring player (starter, D/ST incl.)", best["team"], f"{best['player']} — {best['points']} pts")
 
     def team_with_highest_scoring_bench_player():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         worst = None
         for r in week_rows:
             for p in (r.get("bench") or []):
                 pts = p.get("points", 0)
                 if worst is None or pts < worst["points"]:
-                    worst = {"team": r["team"], "player": p.get("name","Player"), "points": pts}
-        if not worst: return None
+                    worst = {"team": r["team"], "player": p.get("name", "Player"), "points": pts}
+        if not worst:
+            return None
         return ("Highest scoring bench player", worst["team"], f"{worst['player']} — {worst['points']} pts")
 
     def smallest_margin_of_victory():
-        winners = [m for m in matchups if m["winner"] in ("home","away")]
-        if not winners: return None
+        winners = [m for m in matchups if m["winner"] in ("home", "away")]
+        if not winners:
+            return None
         m = min(winners, key=lambda x: x["abs_margin"])
-        win_team = m["home"] if m["winner"]=="home" else m["away"]
+        win_team = m["home"] if m["winner"] == "home" else m["away"]
         return ("Smallest margin of victory", win_team, f"margin {m['abs_margin']}")
 
     def widest_margin_of_victory():
-        winners = [m for m in matchups if m["winner"] in ("home","away")]
-        if not winners: return None
+        winners = [m for m in matchups if m["winner"] in ("home", "away")]
+        if not winners:
+            return None
         m = max(winners, key=lambda x: x["abs_margin"])
-        win_team = m["home"] if m["winner"]=="home" else m["away"]
+        win_team = m["home"] if m["winner"] == "home" else m["away"]
         return ("Widest margin of victory", win_team, f"margin {m['abs_margin']}")
 
     def highest_scoring_starting_k():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
                 if p.get("posId") == POS_K:
                     pts = p.get("points", 0)
                     if best is None or pts > best["points"]:
-                        best = {"team": r["team"], "player": p.get("name","K"), "points": pts}
-        if not best: return None
+                        best = {"team": r["team"], "player": p.get("name", "K"), "points": pts}
+        if not best:
+            return None
         return ("Highest scoring starting K", best["team"], f"{best['player']} — {best['points']} pts")
 
     def highest_scoring_starting_qb():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
                 if p.get("posId") == POS_QB:
                     pts = p.get("points", 0)
                     if best is None or pts > best["points"]:
-                        best = {"team": r["team"], "player": p.get("name","QB"), "points": pts}
-        if not best: return None
+                        best = {"team": r["team"], "player": p.get("name", "QB"), "points": pts}
+        if not best:
+            return None
         return ("Highest scoring starting QB", best["team"], f"{best['player']} — {best['points']} pts")
 
     def most_points_scored_in_losing_effort():
@@ -627,45 +649,52 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
                 rows.append({"team": m["away"], "pts": m["away_pts"]})
             elif m["winner"] == "away":
                 rows.append({"team": m["home"], "pts": m["home_pts"]})
-        if not rows: return None
+        if not rows:
+            return None
         r = max(rows, key=lambda x: x["pts"])
         return ("Most points in a losing effort", r["team"], f"{r['pts']} pts")
 
     def first_place_after_week9():
-        if week < 9 or not standings: return None
+        if week < 9 or not standings:
+            return None
         top = standings[0]
         ties = f"-{top['ties']}" if top.get("ties") else ""
         return ("First place overall (after 9 weeks)", top["name"], f"{top['wins']}-{top['losses']}{ties}, PF {top['points_for']}")
 
     def team_with_dst_most_points():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
                 if p.get("posId") == POS_DST:
                     pts = p.get("points", 0)
                     if best is None or pts > best["points"]:
-                        best = {"team": r["team"], "player": p.get("name","D/ST"), "points": pts}
-        if not best: return None
+                        best = {"team": r["team"], "player": p.get("name", "D/ST"), "points": pts}
+        if not best:
+            return None
         return ("D/ST with most points", best["team"], f"{best['player']} — {best['points']} pts")
 
     def highest_combined_starting_rb_points_incl_flex():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best_team = None
         best_sum = -1.0
         for r in week_rows:
             total = 0.0
             for p in (r.get("starters") or []):
                 if p.get("posId") == POS_RB:
-                    total += float(p.get("points",0) or 0)
+                    total += float(p.get("points", 0) or 0)
             if total > best_sum:
                 best_sum = total
                 best_team = r["team"]
-        if best_team is None: return None
-        return ("Highest combined starting RB points", best_team, f"{round(best_sum,2)} pts")
+        if best_team is None:
+            return None
+        return ("Highest combined starting RB points", best_team, f"{round(best_sum, 2)} pts")
 
     def team_closest_to_projected_total():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             proj_sum = 0.0
@@ -681,13 +710,14 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
                 continue
             diff = abs(r["pts"] - proj_sum)
             if best is None or diff < best["diff"]:
-                best = {"team": r["team"], "proj": round(proj_sum,2), "actual": r["pts"], "diff": round(diff,2)}
+                best = {"team": r["team"], "proj": round(proj_sum, 2), "actual": r["pts"], "diff": round(diff, 2)}
         if not best:
             return None
         return ("Closest to projected total", best["team"], f"diff {best['diff']} (proj {best['proj']} vs {best['actual']})")
 
     def most_points_against_cumulative():
-        if not standings: return None
+        if not standings:
+            return None
         r = max(standings, key=lambda t: t.get("points_against", 0))
         pa = r.get("points_against", 0)
         return ("Most points against (season)", r["name"], f"{pa} against")
@@ -697,32 +727,37 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         for m in matchups:
             all_rows.append({"team": m["home"], "pts": m["home_pts"]})
             all_rows.append({"team": m["away"], "pts": m["away_pts"]})
-        if not all_rows: return None
+        if not all_rows:
+            return None
         row = min(all_rows, key=lambda r: r["pts"])
         return ("Lowest weekly score", row["team"], f"{row['pts']} pts")
 
     def highest_scoring_flex():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
                 if p.get("slotId") == LINEUP_SLOT_FLEX:
                     pts = p.get("points", 0)
                     if best is None or pts > best["points"]:
-                        best = {"team": r["team"], "player": p.get("name","FLEX"), "points": pts}
-        if not best: return None
+                        best = {"team": r["team"], "player": p.get("name", "FLEX"), "points": pts}
+        if not best:
+            return None
         return ("Highest scoring FLEX", best["team"], f"{best['player']} — {best['points']} pts")
 
     def highest_scoring_te():
-        if not week_rows: return None
+        if not week_rows:
+            return None
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
                 if p.get("posId") == POS_TE:
                     pts = p.get("points", 0)
                     if best is None or pts > best["points"]:
-                        best = {"team": r["team"], "player": p.get("name","TE"), "points": pts}
-        if not best: return None
+                        best = {"team": r["team"], "player": p.get("name", "TE"), "points": pts}
+        if not best:
+            return None
         return ("Highest scoring TE", best["team"], f"{best['player']} — {best['points']} pts")
 
     def first_team_out_overall():
@@ -734,15 +769,15 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
         return ("First Team Out", t["name"], f"7th place • {rec}, PF {t['points_for']}")
 
     mapping = {
-        1:  highest_scoring_team,
-        2:  team_with_highest_scoring_player_starters_incl_dst,
-        3:  team_with_highest_scoring_bench_player,
-        4:  smallest_margin_of_victory,
-        5:  widest_margin_of_victory,
-        6:  highest_scoring_starting_k,
-        7:  highest_scoring_starting_qb,
-        8:  most_points_scored_in_losing_effort,
-        9:  first_place_after_week9,
+        1: highest_scoring_team,
+        2: team_with_highest_scoring_player_starters_incl_dst,
+        3: team_with_highest_scoring_bench_player,
+        4: smallest_margin_of_victory,
+        5: widest_margin_of_victory,
+        6: highest_scoring_starting_k,
+        7: highest_scoring_starting_qb,
+        8: most_points_scored_in_losing_effort,
+        9: first_place_after_week9,
         10: team_with_dst_most_points,
         11: highest_combined_starting_rb_points_incl_flex,
         12: team_closest_to_projected_total,
@@ -770,17 +805,17 @@ def compute_week_challenge(week:int, matchups, standings, week_rows):
 # Upcoming challenge (new)
 # ============================
 
-def get_challenge_title_by_week(week:int) -> str | None:
+def get_challenge_title_by_week(week: int) -> str | None:
     titles = {
-        1:  "Highest scoring team",
-        2:  "Highest scoring player (starter, D/ST incl.)",
-        3:  "Highest scoring bench player",
-        4:  "Smallest margin of victory",
-        5:  "Widest margin of victory",
-        6:  "Highest scoring starting K",
-        7:  "Highest scoring starting QB",
-        8:  "Most points in a losing effort",
-        9:  "First place overall (after 9 weeks)",
+        1: "Highest scoring team",
+        2: "Highest scoring player (starter, D/ST incl.)",
+        3: "Highest scoring bench player",
+        4: "Smallest margin of victory",
+        5: "Widest margin of victory",
+        6: "Highest scoring starting K",
+        7: "Highest scoring starting QB",
+        8: "Most points in a losing effort",
+        9: "First place overall (after 9 weeks)",
         10: "D/ST with most points",
         11: "Highest combined starting RB points",
         12: "Closest to projected total",
@@ -792,14 +827,14 @@ def get_challenge_title_by_week(week:int) -> str | None:
     }
     return titles.get(int(week))
 
-def describe_upcoming_challenge(current_week:int) -> dict | None:
+def describe_upcoming_challenge(current_week: int) -> dict | None:
     next_week = int(current_week) + 1
     title = get_challenge_title_by_week(next_week)
     if not title:
         return None
     return {
         "label": f"Next Week's Challenge (Week {next_week})",
-        "subtitle": title
+        "subtitle": title,
     }
 
 # ============================
@@ -826,7 +861,7 @@ def compute_power_rankings(standings: list[dict]) -> list[dict]:
             "record": f"{wins}-{losses}" + (f"-{r['ties']}" if r.get("ties") else ""),
             "pf": round(pf, 2),
             "pa": round(pa, 2),
-            "score": round(score, 3)
+            "score": round(score, 3),
         })
     rows.sort(key=lambda x: (x["score"], x["pf"]), reverse=True)
     for i, r in enumerate(rows, start=1):
@@ -839,7 +874,7 @@ def compute_power_rankings(standings: list[dict]) -> list[dict]:
 
 MAX_CHALLENGE_WEEK = 17  # rotation covers weeks 1–17
 
-def _fetch_week_bits(season:int, week:int):
+def _fetch_week_bits(season: int, week: int):
     """Fetch scoreboard/teams/box + transform for a given week."""
     payloads = espn_fetch_jsons(LEAGUE_ID, season, week)
     scoreboard = payloads["scoreboard"]
@@ -850,7 +885,7 @@ def _fetch_week_bits(season:int, week:int):
     standings = extract_standings(teams)
     return matchups, standings, week_rows
 
-def build_weekly_challenges(season:int, current_week:int) -> list[dict]:
+def build_weekly_challenges(season: int, current_week: int) -> list[dict]:
     """
     Returns rows: [{week, title, winner, detail}]
     - For weeks <= current_week: compute winner from that week’s data.
@@ -868,7 +903,7 @@ def build_weekly_challenges(season:int, current_week:int) -> list[dict]:
                         "week": wk,
                         "title": title,
                         "winner": ch["winner"],
-                        "detail": ch["detail"]
+                        "detail": ch["detail"],
                     })
                 else:
                     rows.append({"week": wk, "title": title, "winner": "—", "detail": ""})
@@ -1065,7 +1100,7 @@ HTML_TMPL = Template("""
                 {% endif %}
               </td>
             </tr>
-			
+
           <!-- Playoffs -->
 {% if playoff_bracket and playoff_bracket|length > 0 %}
 <tr>
@@ -1267,12 +1302,13 @@ def main():
     power = compute_power_rankings(standings)
     next_challenge = describe_upcoming_challenge(week)
 
-    # NEW: build full Weekly Challenges table (Weeks 1–13)
+    # NEW: build full Weekly Challenges table (Weeks 1–17)
     weekly_challenges = build_weekly_challenges(season, week)
 
     waiver = compute_waiver_order(teams, standings)
-		
-	playoff_bracket = build_real_playoff_bracket(season, teams)
+
+    # NEW: real ESPN playoff bracket
+    playoff_bracket = build_real_playoff_bracket(season, teams)
 
     narrative = build_narrative(matchups, week, week_rows)
 
@@ -1288,10 +1324,10 @@ def main():
         next_challenge=next_challenge,
         power=power,
         weekly_challenges=weekly_challenges,
-        waiver=waiver,               
-		playoff_bracket=playoff_bracket,   # ⬅️ NEW
-        logo_url=LOGO_URL,            # <— LOGO
-        now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        waiver=waiver,
+        playoff_bracket=playoff_bracket,
+        logo_url=LOGO_URL,
+        now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
     subject = f"Fantasy Week {week} Results & Notes"
 
