@@ -1307,8 +1307,15 @@ def main():
 
     waiver = compute_waiver_order(teams, standings)
 
-    # NEW: real ESPN playoff bracket
-    playoff_bracket = build_real_playoff_bracket(season, teams)
+        # NEW: real ESPN playoff bracket (only once playoffs start)
+    if week >= 14:  # adjust if your league starts playoffs a different week
+        try:
+            playoff_bracket = build_real_playoff_bracket(season, teams)
+        except Exception as e:
+            print(f"[WARN] Playoff bracket fetch failed: {e}", file=sys.stderr)
+            playoff_bracket = []
+    else:
+        playoff_bracket = []
 
     narrative = build_narrative(matchups, week, week_rows)
 
