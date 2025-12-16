@@ -235,13 +235,14 @@ def extract_standings(teams):
     rows.sort(key=lambda r: (r["wins"], r["points_for"]), reverse=True)
     return rows
 
-def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
+def build_real_playoff_bracket(season: int, teams: list[dict], current_week: int | None = None) -> list[dict]:
     """
     Pulls the *actual* ESPN playoff schedule (winners & consolation brackets)
     using the mMatchup view, and returns rows for the email template.
 
-    Each row:
-      {round, tier, team1, team2, score, status, result_tag, team1_logo, team2_logo}
+    IMPORTANT: If current_week is provided, we prefer to show the *next* playoff
+    matchup week (matchupPeriodId == current_week+1), falling back to the earliest
+    playoff week >= current_week+1. This prevents showing already-played Round 1.
     """
     cookies = {"espn_s2": ESPN_S2, "SWID": SWID}
     s = requests.Session()
@@ -277,14 +278,14 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
         if round_id is None:
             continue
 
+        mpid = m.get("matchupPeriodId")
+        mpid = int(mpid) if isinstance(mpid, (int, float)) else None
+
         home_pts = float(home.get("totalPoints", 0) or 0)
         away_pts = float(away.get("totalPoints", 0) or 0)
         winner_flag = (m.get("winner") or "").upper()
 
-        if winner_flag == "HOME" and home_pts != away_pts:
-            status = "Final"
-            result_tag = "FINAL"
-        elif winner_flag == "AWAY" and home_pts != away_pts:
+        if winner_flag in ("HOME", "AWAY") and home_pts != away_pts:
             status = "Final"
             result_tag = "FINAL"
         elif home_pts == 0 and away_pts == 0:
@@ -299,6 +300,7 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
 
         playoff_games.append({
             "round_id": int(round_id),
+            "matchup_period_id": mpid,
             "tier_raw": str(tier),
             "team1": team1_name,
             "team2": team2_name,
@@ -313,18 +315,26 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
     if not playoff_games:
         return []
 
-    # ✅ NEW: show only the "current / next" playoff round
-    # If there are any non-final games, pick the earliest round among them.
-    # Otherwise, show the latest round (everything completed).
-    non_final = [g for g in playoff_games if (g.get("status") or "").lower() != "final"]
-    if non_final:
-        target_round_id = min(g["round_id"] for g in non_final)
-    else:
-        target_round_id = max(g["round_id"] for g in playoff_games)
+    # ✅ NEW: pick the next playoff matchup week relative to the recap email week
+    if current_week is not None:
+        next_week = int(current_week) + 1
+        with_mpid = [g for g in playoff_games if isinstance(g.get("matchup_period_id"), int)]
 
-    playoff_games = [g for g in playoff_games if g["round_id"] == target_round_id]
+        exact = [g for g in with_mpid if g["matchup_period_id"] == next_week]
+        if exact:
+            playoff_games = exact
+        else:
+            future = [g for g in with_mpid if g["matchup_period_id"] >= next_week]
+            if future:
+                target = min(g["matchup_period_id"] for g in future)
+                playoff_games = [g for g in future if g["matchup_period_id"] == target]
+            else:
+                # fallback: last playoff week available
+                if with_mpid:
+                    target = max(g["matchup_period_id"] for g in with_mpid)
+                    playoff_games = [g for g in with_mpid if g["matchup_period_id"] == target]
 
-    # Map round IDs to nice labels (Quarterfinals / Semis / Final)
+    # Map round IDs to nice labels
     round_ids = sorted({g["round_id"] for g in playoff_games})
     round_labels = {}
     n_rounds = len(round_ids)
@@ -334,7 +344,7 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
         elif n_rounds == 2:
             names = {1: "Semifinals", 2: "Final"}
         else:
-            names = {1: "Final"}
+            names = {1: "Playoffs"}
         round_labels[rid] = names.get(idx, f"Round {idx}")
 
     def tier_label(tier_raw: str) -> str:
@@ -362,14 +372,14 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
             "score": score,
             "status": g["status"],
             "result_tag": g["result_tag"],
-            "_round_order": g["round_id"],
             "_tier_order": 0 if "Championship" in label else 1,
+            "_mpid": g.get("matchup_period_id") or 999,
         })
 
-    rows.sort(key=lambda x: (x["_round_order"], x["_tier_order"], x["team1"]))
+    rows.sort(key=lambda x: (x["_mpid"], x["_tier_order"], x["team1"]))
     for r in rows:
-        r.pop("_round_order", None)
         r.pop("_tier_order", None)
+        r.pop("_mpid", None)
     return rows
 
 def build_playoff_preview_from_standings(
@@ -392,7 +402,6 @@ def build_playoff_preview_from_standings(
     if not standings or len(standings) < num_seeds:
         return []
 
-    # Top N seeds (already sorted by extract_standings)
     seeds = standings[:num_seeds]
 
     def rec_str(row):
@@ -405,7 +414,6 @@ def build_playoff_preview_from_standings(
 
     name_to_logo = build_team_logo_map(teams or [])
 
-    # Convenience to build the per-team info
     def team_info(seed_idx: int):
         row = seeds[seed_idx - 1]
         name = row["name"]
@@ -418,7 +426,6 @@ def build_playoff_preview_from_standings(
 
     rows: list[dict] = []
 
-    # --- BYE for #1 ---
     t1 = team_info(1)
     rows.append({
         "round": "Round 1",
@@ -436,7 +443,6 @@ def build_playoff_preview_from_standings(
         "result_tag": "PROJ",
     })
 
-    # --- Game: #5 @ #4 ---
     t4 = team_info(4)
     t5 = team_info(5)
     rows.append({
@@ -455,7 +461,6 @@ def build_playoff_preview_from_standings(
         "result_tag": "PROJ",
     })
 
-    # --- Game: #6 @ #3 ---
     t3 = team_info(3)
     t6 = team_info(6)
     rows.append({
@@ -474,7 +479,6 @@ def build_playoff_preview_from_standings(
         "result_tag": "PROJ",
     })
 
-    # --- BYE for #2 ---
     t2 = team_info(2)
     rows.append({
         "round": "Round 1",
@@ -497,8 +501,7 @@ def build_playoff_preview_from_standings(
 def compute_waiver_order(teams: list[dict], standings: list[dict]) -> list[dict]:
     """
     Returns a list of {rank:int, name:str}. Tries to use ESPN's waiver priority
-    from team objects; if unavailable, falls back to inverse standings
-    (wins asc, points_for asc) as an approximation.
+    from team objects; if unavailable, falls back to inverse standings.
     """
     if not teams:
         return []
@@ -536,10 +539,6 @@ def compute_waiver_order(teams: list[dict], standings: list[dict]) -> list[dict]
 # ==========================
 
 def _safe_entries(side):
-    """
-    Returns list of roster entries for a side (home/away) in boxscore schedule.
-    ESPN often stores under side['rosterForCurrentScoringPeriod']['entries'].
-    """
     if not isinstance(side, dict):
         return []
     r = side.get("rosterForCurrentScoringPeriod") or side.get("rosterForMatchupPeriod")
@@ -547,11 +546,6 @@ def _safe_entries(side):
     return entries or []
 
 def build_week_stats_from_boxscore(boxscore, teams, week):
-    """
-    Produce per-team rows with player-level context for the week.
-    Each row: {team, pts, opp, opp_pts, won, abs_margin, starters:[...], bench:[...], proj: float|None}
-    Player item: {name, posId, slotId, points, proj}
-    """
     if not isinstance(boxscore, dict):
         return None
 
@@ -985,11 +979,6 @@ def describe_upcoming_challenge(current_week: int) -> dict | None:
 # ============================
 
 def compute_power_rankings(standings: list[dict]) -> list[dict]:
-    """
-    Compute a simple weekly power ranking:
-      score = 2*wins - losses + (points_for - points_against) / 100
-    Sort by score desc, then PF desc.
-    """
     if not standings:
         return []
     rows = []
@@ -1015,10 +1004,9 @@ def compute_power_rankings(standings: list[dict]) -> list[dict]:
 # NEW: Build full Weekly Challenges section
 # =========================================
 
-MAX_CHALLENGE_WEEK = 17  # rotation covers weeks 1–17
+MAX_CHALLENGE_WEEK = 17
 
 def _fetch_week_bits(season: int, week: int):
-    """Fetch scoreboard/teams/box + transform for a given week."""
     payloads = espn_fetch_jsons(LEAGUE_ID, season, week)
     scoreboard = payloads["scoreboard"]
     teams = payloads["teams"]
@@ -1029,11 +1017,6 @@ def _fetch_week_bits(season: int, week: int):
     return matchups, standings, week_rows
 
 def build_weekly_challenges(season: int, current_week: int) -> list[dict]:
-    """
-    Returns rows: [{week, title, winner, detail}]
-    - For weeks <= current_week: compute winner from that week’s data.
-    - For weeks  > current_week: 'TBD' winner with challenge title.
-    """
     rows = []
     for wk in range(1, MAX_CHALLENGE_WEEK + 1):
         title = get_challenge_title_by_week(wk) or f"Challenge Week {wk}"
@@ -1062,14 +1045,6 @@ def build_weekly_challenges(season: int, current_week: int) -> list[dict]:
 # ===============
 
 def build_narrative(matchups, week, week_rows=None):
-    """
-    Week recap with:
-      - closest game
-      - biggest blowout
-      - rotating tease for any team >20 below projection (if projections available)
-      - rotating jab for the week's lowest score
-    Rotation index = (week-1) % 3
-    """
     if not matchups:
         return f"No results yet for Week {week}."
 
@@ -1125,25 +1100,21 @@ def build_narrative(matchups, week, week_rows=None):
 # HTML template
 # =============
 
-HTML_TMPL = Template("""
-<!doctype html>
+HTML_TMPL = Template("""<!doctype html>
 <html>
   <body style="margin:0; padding:0; background:#f5f7fb;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f5f7fb; padding:24px 0;">
       <tr>
         <td align="center">
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px; max-width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-    
-<!-- Header -->
+
 <tr>
   <td style="background:#0f172a; color:#ffffff; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
-        <!-- Left: Title -->
         <td align="left" valign="middle" style="padding-right:12px;">
           <div style="font-size:22px; line-height:1.2; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
         </td>
-        <!-- Right: Logo -->
         <td align="right" valign="middle" width="120" style="width:120px;">
           {% if logo_url %}
           <img src="{{ logo_url }}"
@@ -1157,7 +1128,6 @@ HTML_TMPL = Template("""
   </td>
 </tr>
 
-            <!-- Narrative -->
             <tr>
               <td style="padding:20px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Weekly Recap</div>
@@ -1167,7 +1137,6 @@ HTML_TMPL = Template("""
               </td>
             </tr>
 
-            <!-- Weekly Challenge Winner -->
             {% if challenge %}
             <tr>
               <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -1187,7 +1156,6 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
-            <!-- Upcoming Weekly Challenge -->
             {% if next_challenge %}
             <tr>
               <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -1207,7 +1175,6 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
-            <!-- Matchups -->
             <tr>
               <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Matchups & Results</div>
@@ -1249,146 +1216,134 @@ HTML_TMPL = Template("""
               </td>
             </tr>
 
-            <!-- Playoffs -->
-{% if playoff_bracket and playoff_bracket|length > 0 %}
-<tr>
-  <td style="padding:16px 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
-    <!-- Header like "WINNER'S BRACKET" -->
-    <div style="font-size:14px; font-weight:700; color:#111827; text-transform:uppercase; letter-spacing:.1em; margin-bottom:2px;">
-      Winner's Bracket
-    </div>
-    <div style="font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.12em; margin-bottom:10px;">
-      {% if playoff_bracket[0].result_tag == 'PROJ' %}
-        Projected | Round 1
-      {% else %}
-        Playoffs
-      {% endif %}
-    </div>
-
-    <!-- Cards, stacked vertically like ESPN UI -->
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate; border-spacing:0 8px;">
-      <tbody>
-        {% for g in playoff_bracket %}
-        <tr>
-          <td>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-                   style="border-radius:10px; border:1px solid #e5e7eb; background:#ffffff;">
-              <!-- Top team -->
-              <tr>
-                <td style="padding:8px 10px; width:36px; vertical-align:top;">
-                  {% if g.team1_logo %}
-                  <img src="{{ g.team1_logo }}" alt="{{ g.team1 }}" width="28" height="28"
-                       style="display:block; border-radius:999px; object-fit:cover;">
+            {% if playoff_bracket and playoff_bracket|length > 0 %}
+            <tr>
+              <td style="padding:16px 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:14px; font-weight:700; color:#111827; text-transform:uppercase; letter-spacing:.1em; margin-bottom:2px;">
+                  Winner's Bracket
+                </div>
+                <div style="font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.12em; margin-bottom:10px;">
+                  {% if playoff_bracket[0].result_tag == 'PROJ' %}
+                    Projected | Round 1
                   {% else %}
-                  <div style="width:28px; height:28px; border-radius:999px; background:#e5e7eb;"></div>
+                    Playoffs
                   {% endif %}
-                </td>
-                <td style="padding:8px 10px 4px 0; vertical-align:top;">
-                  <div style="font-size:13px; color:#111827; font-weight:600;">
-                    {% if g.team1_seed %}#{{ g.team1_seed }} {% endif %}{{ g.team1 }}
-                  </div>
-                  {% if g.team1_record %}
-                  <div style="font-size:11px; color:#6b7280; margin-top:2px;">
-                    ({{ g.team1_record }})
-                  </div>
-                  {% endif %}
-                </td>
-                <td style="padding:8px 10px 4px 10px; text-align:right; vertical-align:top; white-space:nowrap;">
-                  {% if g.score and g.result_tag != 'PROJ' %}
-                    <div style="font-size:13px; font-weight:700; color:#111827;">
-                      {{ g.score.split('–')[-1].strip().split(' ')|last }}
-                    </div>
-                  {% elif g.status == 'BYE' %}
-                    <div style="font-size:11px; color:#6b7280; font-weight:600;">BYE</div>
-                  {% endif %}
-                </td>
-              </tr>
+                </div>
 
-              <!-- Bottom team or BYE row -->
-              <tr>
-                <td style="padding:0 10px 8px 10px; width:36px; vertical-align:top;">
-                  {% if g.team2 %}
-                    {% if g.team2_logo %}
-                    <img src="{{ g.team2_logo }}" alt="{{ g.team2 }}" width="28" height="28"
-                         style="display:block; border-radius:999px; object-fit:cover;">
-                    {% else %}
-                    <div style="width:28px; height:28px; border-radius:999px; background:#e5e7eb;"></div>
-                    {% endif %}
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate; border-spacing:0 8px;">
+                  <tbody>
+                    {% for g in playoff_bracket %}
+                    <tr>
+                      <td>
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                               style="border-radius:10px; border:1px solid #e5e7eb; background:#ffffff;">
+                          <tr>
+                            <td style="padding:8px 10px; width:36px; vertical-align:top;">
+                              {% if g.team1_logo %}
+                              <img src="{{ g.team1_logo }}" alt="{{ g.team1 }}" width="28" height="28"
+                                   style="display:block; border-radius:999px; object-fit:cover;">
+                              {% else %}
+                              <div style="width:28px; height:28px; border-radius:999px; background:#e5e7eb;"></div>
+                              {% endif %}
+                            </td>
+                            <td style="padding:8px 10px 4px 0; vertical-align:top;">
+                              <div style="font-size:13px; color:#111827; font-weight:600;">
+                                {% if g.team1_seed %}#{{ g.team1_seed }} {% endif %}{{ g.team1 }}
+                              </div>
+                              {% if g.team1_record %}
+                              <div style="font-size:11px; color:#6b7280; margin-top:2px;">
+                                ({{ g.team1_record }})
+                              </div>
+                              {% endif %}
+                            </td>
+                            <td style="padding:8px 10px 4px 10px; text-align:right; vertical-align:top; white-space:nowrap;">
+                              {% if g.score and g.result_tag != 'PROJ' %}
+                                <div style="font-size:13px; font-weight:700; color:#111827;"></div>
+                              {% elif g.status == 'BYE' %}
+                                <div style="font-size:11px; color:#6b7280; font-weight:600;">BYE</div>
+                              {% endif %}
+                            </td>
+                          </tr>
+
+                          <tr>
+                            <td style="padding:0 10px 8px 10px; width:36px; vertical-align:top;">
+                              {% if g.team2 %}
+                                {% if g.team2_logo %}
+                                <img src="{{ g.team2_logo }}" alt="{{ g.team2 }}" width="28" height="28"
+                                     style="display:block; border-radius:999px; object-fit:cover;">
+                                {% else %}
+                                <div style="width:28px; height:28px; border-radius:999px; background:#e5e7eb;"></div>
+                                {% endif %}
+                              {% else %}
+                                <div style="width:28px; height:28px; border-radius:999px; background:#f3f4f6;"></div>
+                              {% endif %}
+                            </td>
+                            <td style="padding:0 10px 8px 0; vertical-align:middle;">
+                              {% if g.team2 %}
+                              <div style="font-size:13px; color:#111827; font-weight:600;">
+                                {% if g.team2_seed %}#{{ g.team2_seed }} {% endif %}{{ g.team2 }}
+                              </div>
+                              {% if g.team2_record %}
+                              <div style="font-size:11px; color:#6b7280; margin-top:2px;">
+                                ({{ g.team2_record }})
+                              </div>
+                              {% endif %}
+                              {% else %}
+                              <div style="font-size:13px; color:#9ca3af; font-style:italic;">
+                                BYE
+                              </div>
+                              {% endif %}
+                            </td>
+                            <td style="padding:0 10px 8px 10px; text-align:right; vertical-align:middle; white-space:nowrap;">
+                              {% if g.status and g.result_tag != 'PROJ' %}
+                                <div style="font-size:11px; color:#6b7280;">{{ g.status }}</div>
+                              {% endif %}
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                  {% if playoff_bracket[0].result_tag == 'PROJ' %}
+                    Projected based on current standings (not an official ESPN bracket).
                   {% else %}
-                    <!-- empty bullet like ESPN -->
-                    <div style="width:28px; height:28px; border-radius:999px; background:#f3f4f6;"></div>
+                    Pulled directly from ESPN’s live playoff schedule.
                   {% endif %}
-                </td>
-                <td style="padding:0 10px 8px 0; vertical-align:middle;">
-                  {% if g.team2 %}
-                  <div style="font-size:13px; color:#111827; font-weight:600;">
-                    {% if g.team2_seed %}#{{ g.team2_seed }} {% endif %}{{ g.team2 }}
-                  </div>
-                  {% if g.team2_record %}
-                  <div style="font-size:11px; color:#6b7280; margin-top:2px;">
-                    ({{ g.team2_record }})
-                  </div>
-                  {% endif %}
-                  {% else %}
-                  <div style="font-size:13px; color:#9ca3af; font-style:italic;">
-                    BYE
-                  </div>
-                  {% endif %}
-                </td>
-                <td style="padding:0 10px 8px 10px; text-align:right; vertical-align:middle; white-space:nowrap;">
-                  {% if g.score and g.result_tag != 'PROJ' and g.team2 %}
-                    <div style="font-size:13px; font-weight:700; color:#111827;">
-                      {{ g.score.split('–')[0].strip().split(' ')|last }}
-                    </div>
-                  {% endif %}
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+                </div>
+              </td>
+            </tr>
+            {% endif %}
 
-    <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
-      {% if playoff_bracket[0].result_tag == 'PROJ' %}
-        Projected based on current standings (not an official ESPN bracket).
-      {% else %}
-        Pulled directly from ESPN’s live playoff schedule.
-      {% endif %}
-    </div>
-  </td>
-</tr>
-{% endif %}
+            {% if standings and standings|length > 0 %}
+            <tr>
+              <td style="padding:4px 24px 12px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Standings</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
+                      <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">W-L-T</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in standings %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.name }}</td>
+                      <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
 
-            <!-- Standings -->
-{% if standings and standings|length > 0 %}
-<tr>
-  <td style="padding:4px 24px 12px 24px; font-family:Arial, Helvetica, sans-serif;">
-    <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Standings</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
-      <thead>
-        <tr style="background:#f1f5f9;">
-          <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
-          <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">W-L-T</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in standings %}
-        <tr>
-          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.name }}</td>
-          <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
-            {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </td>
-</tr>
-{% endif %}
-
-            <!-- Power Rankings -->
             {% if power and power|length > 0 %}
             <tr>
               <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -1422,7 +1377,6 @@ HTML_TMPL = Template("""
             </tr>
             {% endif %}
 
-            <!-- Weekly Challenges (ALL WEEKS) -->
             {% if weekly_challenges and weekly_challenges|length > 0 %}
             <tr>
               <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -1450,41 +1404,39 @@ HTML_TMPL = Template("""
               </td>
             </tr>
             {% endif %}
-            
-            <!-- Waiver Order -->
-{% if waiver and waiver|length > 0 %}
-<tr>
-  <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
-    <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Waiver Wire Order (Next Week)</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
-      <thead>
-        <tr style="background:#f1f5f9;">
-          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">#</th>
-          <th align="left"  style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for w in waiver %}
-        <tr>
-          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ w.rank }}</td>
-          <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ w.name }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <div style="font-size:11px; color:#94a3b8; margin-top:6px;">If your league uses rolling waivers or FAAB, this reflects the current priority. Otherwise it’s the inverse of standings.</div>
-  </td>
-</tr>
-{% endif %}
-            
-            <!-- Footer -->
+
+            {% if waiver and waiver|length > 0 %}
+            <tr>
+              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Waiver Wire Order (Next Week)</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">#</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for w in waiver %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ w.rank }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ w.name }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">If your league uses rolling waivers or FAAB, this reflects the current priority. Otherwise it’s the inverse of standings.</div>
+              </td>
+            </tr>
+            {% endif %}
+
             <tr>
               <td style="padding:18px 24px 26px 24px; font-family:Arial, Helvetica, sans-serif; color:#94a3b8; font-size:12px; text-align:center;">
                 Sent from the Geno's league headquarters by Commissioner Lally's office • Week {{ week }}<br>
                 Generated {{ now }}
               </td>
             </tr>
-            
+
           </table>
         </td>
       </tr>
@@ -1520,7 +1472,7 @@ def main():
     # Playoff bracket: real if available, else projected preview
     playoff_bracket: list[dict] = []
     try:
-        playoff_bracket = build_real_playoff_bracket(season, teams)
+        playoff_bracket = build_real_playoff_bracket(season, teams, current_week=week)
     except Exception as e:
         print(f"[WARN] Playoff bracket fetch failed: {e}", file=sys.stderr)
         playoff_bracket = []
