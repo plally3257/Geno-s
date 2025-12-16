@@ -313,6 +313,17 @@ def build_real_playoff_bracket(season: int, teams: list[dict]) -> list[dict]:
     if not playoff_games:
         return []
 
+    # ✅ NEW: show only the "current / next" playoff round
+    # If there are any non-final games, pick the earliest round among them.
+    # Otherwise, show the latest round (everything completed).
+    non_final = [g for g in playoff_games if (g.get("status") or "").lower() != "final"]
+    if non_final:
+        target_round_id = min(g["round_id"] for g in non_final)
+    else:
+        target_round_id = max(g["round_id"] for g in playoff_games)
+
+    playoff_games = [g for g in playoff_games if g["round_id"] == target_round_id]
+
     # Map round IDs to nice labels (Quarterfinals / Semis / Final)
     round_ids = sorted({g["round_id"] for g in playoff_games})
     round_labels = {}
