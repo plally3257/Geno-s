@@ -1255,44 +1255,6 @@ HTML_TMPL = Template("""<!doctype html>
               </td>
             </tr>
 
-            {% if challenge %}
-            <tr>
-              <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ecfdf5; border:1px solid #10b981; border-radius:10px;">
-                  <tr>
-                    <td style="padding:14px 16px;">
-                      <div style="font-size:15px; font-weight:700; color:#065f46; margin-bottom:4px;">
-                        🏅 Weekly Challenge Winner — {{ challenge.subtitle }}
-                      </div>
-                      <div style="font-size:14px; color:#065f46;">
-                        <strong>{{ challenge.winner }}</strong> <span style="opacity:.85;">({{ challenge.detail }})</span>
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            {% endif %}
-
-            {% if next_challenge %}
-            <tr>
-              <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#eff6ff; border:1px solid #3b82f6; border-radius:10px;">
-                  <tr>
-                    <td style="padding:14px 16px;">
-                      <div style="font-size:15px; font-weight:700; color:#1e40af; margin-bottom:4px;">
-                        🔮 {{ next_challenge.label }}
-                      </div>
-                      <div style="font-size:14px; color:#1e3a8a;">
-                        {{ next_challenge.subtitle }}
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            {% endif %}
-
             <tr>
               <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Matchups & Results</div>
@@ -1333,6 +1295,109 @@ HTML_TMPL = Template("""<!doctype html>
                 {% endif %}
               </td>
             </tr>
+
+            {% if challenge %}
+            <tr>
+              <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ecfdf5; border:1px solid #10b981; border-radius:10px;">
+                  <tr>
+                    <td style="padding:14px 16px;">
+                      <div style="font-size:15px; font-weight:700; color:#065f46; margin-bottom:4px;">
+                        🏅 Weekly Challenge Winner — {{ challenge.subtitle }}
+                      </div>
+                      <div style="font-size:14px; color:#065f46;">
+                        <strong>{{ challenge.winner }}</strong> <span style="opacity:.85;">({{ challenge.detail }})</span>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
+
+            {% if standings and standings|length > 0 %}
+            <tr>
+              <td style="padding:4px 24px 12px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">
+                  Standings
+                </div>
+
+                <table role="presentation"
+                       width="100%"
+                       cellpadding="0"
+                       cellspacing="0"
+                       border="0"
+                       style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left"
+                          style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        Team
+                      </th>
+                      <th align="center"
+                          style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        W-L-T
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {% for r in standings %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+                        {% if r.logo %}
+                        <img src="{{ r.logo }}"
+                             alt=""
+                             width="28"
+                             height="28"
+                             style="width:28px; height:28px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:8px;">
+                        {% endif %}
+                        <span style="vertical-align:middle;">{{ r.name }}</span>
+                      </td>
+
+                      <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
+
+            {% if power and power|length > 0 %}
+            <tr>
+              <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Power Rankings{% if (week|int) <= 2 %} (Provisional){% endif %}</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">#</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
+                      <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Record</th>
+                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Massey</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in power %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.rank }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+                        {{ r.name }}{% if r.championship_marker %} {{ r.championship_marker }}{% endif %}
+                      </td>
+                      <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.record }}</td>
+                      <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.score }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                    Massey rating based on scoring margins and opponent strength through Week {{ week }}. Ratings are centered around zero; higher is better.
+                </div>
+              </td>
+            </tr>
+            {% endif %}
 
             {% if (week|int) >= 10 and playoff_bracket and playoff_bracket|length > 0 %}
             <tr>
@@ -1436,118 +1501,6 @@ HTML_TMPL = Template("""<!doctype html>
             </tr>
             {% endif %}
 
-            {% if standings and standings|length > 0 %}
-            <tr>
-              <td style="padding:4px 24px 12px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">
-                  Standings
-                </div>
-
-                <table role="presentation"
-                       width="100%"
-                       cellpadding="0"
-                       cellspacing="0"
-                       border="0"
-                       style="border-collapse:collapse; border:1px solid #e5e7eb;">
-                  <thead>
-                    <tr style="background:#f1f5f9;">
-                      <th align="left"
-                          style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">
-                        Team
-                      </th>
-                      <th align="center"
-                          style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">
-                        W-L-T
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {% for r in standings %}
-                    <tr>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
-                        {% if r.logo %}
-                        <img src="{{ r.logo }}"
-                             alt=""
-                             width="28"
-                             height="28"
-                             style="width:28px; height:28px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:8px;">
-                        {% endif %}
-                        <span style="vertical-align:middle;">{{ r.name }}</span>
-                      </td>
-
-                      <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
-                        {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
-                      </td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
-            {% endif %}
-
-            {% if power and power|length > 0 %}
-            <tr>
-              <td style="padding:4px 24px 20px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Power Rankings</div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
-                  <thead>
-                    <tr style="background:#f1f5f9;">
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">#</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
-                      <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Record</th>
-                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Massey</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for r in power %}
-                    <tr>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.rank }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
-                        {{ r.name }}{% if r.championship_marker %} {{ r.championship_marker }}{% endif %}
-                      </td>
-                      <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.record }}</td>
-                      <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.score }}</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
-                    Massey rating based on scoring margins and opponent strength through Week {{ week }}. Ratings are centered around zero; higher is better.
-                </div>
-              </td>
-            </tr>
-            {% endif %}
-
-            {% if weekly_challenges and weekly_challenges|length > 0 %}
-            <tr>
-              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Weekly Challenges</div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
-                  <thead>
-                    <tr style="background:#f1f5f9;">
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Week</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Challenge</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Winner</th>
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in weekly_challenges %}
-                    <tr>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ (' ' ~ (row.title|title) ~ ' ')|replace(' Qb ', ' QB ')|replace(' Rb ', ' RB ')|replace(' Te ', ' TE ')|replace(' Wr ', ' WR ')|replace(' D/St ', ' D/ST ')|trim }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.winner }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ row.detail }}</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
-            {% endif %}
-
             {% if waiver and waiver|length > 0 %}
             <tr>
               <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
@@ -1569,6 +1522,54 @@ HTML_TMPL = Template("""<!doctype html>
                   </tbody>
                 </table>
                 <div style="font-size:11px; color:#94a3b8; margin-top:6px;">Inverse of Standings</div>
+              </td>
+            </tr>
+            {% endif %}
+
+            {% if next_challenge %}
+            <tr>
+              <td style="padding:0 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#eff6ff; border:1px solid #3b82f6; border-radius:10px;">
+                  <tr>
+                    <td style="padding:14px 16px;">
+                      <div style="font-size:15px; font-weight:700; color:#1e40af; margin-bottom:4px;">
+                        🔮 {{ next_challenge.label }}
+                      </div>
+                      <div style="font-size:14px; color:#1e3a8a;">
+                        {{ next_challenge.subtitle }}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            {% endif %}
+
+            {% if weekly_challenges and weekly_challenges|length > 0 %}
+            <tr>
+              <td style="padding:12px 24px 6px 24px; font-family:Arial, Helvetica, sans-serif;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:10px;">Challenge Tracker</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                  <thead>
+                    <tr style="background:#f1f5f9;">
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Week</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Challenge</th>
+                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in weekly_challenges %}
+                    <tr>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ (' ' ~ (row.title|title) ~ ' ')|replace(' Qb ', ' QB ')|replace(' Rb ', ' RB ')|replace(' Te ', ' TE ')|replace(' Wr ', ' WR ')|replace(' D/St ', ' D/ST ')|trim }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+                        <strong>{{ row.winner }}</strong>
+                        {% if row.detail %}<div style="font-size:12px; color:#64748b; margin-top:2px;">{{ row.detail }}</div>{% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
               </td>
             </tr>
             {% endif %}
