@@ -227,7 +227,7 @@ def extract_standings(teams):
         "make america's team great again": (
             "https://raw.githubusercontent.com/"
             "plally3257/Geno-s/main/assets/"
-            "make-americas-team-great-again.png"
+            "Make%20America%27s%20Team%20Great%20Again.png"
         ),
     }
     
