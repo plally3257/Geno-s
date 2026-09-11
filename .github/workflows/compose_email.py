@@ -224,6 +224,11 @@ def extract_standings(teams):
             "https://raw.githubusercontent.com/"
             "plally3257/Geno-s/main/assets/unemployed-clowns.png"
         ),
+        "make america's team great again": (
+            "https://raw.githubusercontent.com/"
+            "plally3257/Geno-s/main/assets/"
+            "make-americas-team-great-again.png"
+        ),
     }
     
     rows = []
