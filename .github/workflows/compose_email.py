@@ -1097,9 +1097,6 @@ def compute_power_rankings(scoreboard, teams, standings, current_week):
 
         rows.append({
             "name": name,
-            "championship_marker": championship_markers.get(
-                name.strip().casefold(), ""
-            ),
             "record": f"{wins}-{losses}" + (
                 f"-{r['ties']}" if r.get("ties") else ""
             ),
