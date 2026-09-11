@@ -1334,7 +1334,7 @@ HTML_TMPL = Template("""<!doctype html>
               </td>
             </tr>
 
-            {% if playoff_bracket and playoff_bracket|length > 0 %}
+            {% if (week|int) >= 10 and playoff_bracket and playoff_bracket|length > 0 %}
             <tr>
               <td style="padding:16px 24px 8px 24px; font-family:Arial, Helvetica, sans-serif;">
                 <div style="font-size:14px; font-weight:700; color:#111827; text-transform:uppercase; letter-spacing:.1em; margin-bottom:2px;">
