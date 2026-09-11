@@ -1575,7 +1575,7 @@ HTML_TMPL = Template("""<!doctype html>
 
             <tr>
               <td style="padding:18px 24px 26px 24px; font-family:Arial, Helvetica, sans-serif; color:#94a3b8; font-size:12px; text-align:center;">
-                Sent from the Geno's league headquarters by Commissioner Lally's office • Week {{ week }}<br>
+                Sent from Geno's $600 Jaw league headquarters by Commissioner Lally's office • Week {{ week }}<br>
                 Generated {{ now }}
               </td>
             </tr>
