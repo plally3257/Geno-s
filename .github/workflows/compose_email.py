@@ -1435,7 +1435,7 @@ HTML_TMPL = Template("""<!doctype html>
                     {% for row in weekly_challenges %}
                     <tr>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.title|title|replace('Qb', 'QB')|replace('Rb', 'RB')|replace('Te', 'TE')|replace('Wr', 'WR')|replace('D/St', 'D/ST') }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ (' ' ~ (row.title|title) ~ ' ')|replace(' Qb ', ' QB ')|replace(' Rb ', ' RB ')|replace(' Te ', ' TE ')|replace(' Wr ', ' WR ')|replace(' D/St ', ' D/ST ')|trim }}</td>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ row.winner }}</td>
                       <td style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ row.detail }}</td>
                     </tr>
