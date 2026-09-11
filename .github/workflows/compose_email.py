@@ -1012,7 +1012,6 @@ def compute_power_rankings(scoreboard, teams, standings, current_week):
     """
     if not standings:
         return []
-    }
 
     team_map = {
         t["id"]: _team_display_name(t)
