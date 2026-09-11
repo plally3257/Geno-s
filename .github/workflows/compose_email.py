@@ -229,6 +229,8 @@ def extract_standings(teams):
             "plally3257/Geno-s/main/assets/"
             "Make%20America%27s%20Team%20Great%20Again.png"
         ),
+    }
+
     championship_markers = {
         "make america's team great again": "🏆",
         "highland fc": "🏆",
@@ -238,7 +240,7 @@ def extract_standings(teams):
         "steve's super team": "🏆",
         "sir corgs a lot": "🏆",
     }
-    
+
     rows = []
     for t in (teams or []):
         name = _team_display_name(t)
