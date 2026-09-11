@@ -248,6 +248,10 @@ def extract_standings(teams):
         pf = round(get_points_for(t), 2)
         rows.append({
             "name": name,
+            "championship_marker": championship_markers.get(
+                name.strip().casefold(),
+                "",
+            ),
             "logo": logo_overrides.get(
                 name.strip().casefold(),
                 t.get("logo"),
