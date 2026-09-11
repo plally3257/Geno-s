@@ -226,6 +226,7 @@ def extract_standings(teams):
         pf = round(get_points_for(t), 2)
         rows.append({
             "name": name,
+            "logo": t.get("logo"),
             "wins": wins,
             "losses": losses,
             "ties": ties,
@@ -1321,18 +1322,52 @@ HTML_TMPL = Template("""<!doctype html>
             {% if standings and standings|length > 0 %}
             <tr>
               <td style="padding:4px 24px 12px 24px; font-family:Arial, Helvetica, sans-serif;">
-                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">Standings</div>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border:1px solid #e5e7eb;">
+                <div style="font-size:16px; font-weight:700; color:#0f172a; margin:14px 0 8px;">
+                  Standings
+                </div>
+
+                <table role="presentation"
+                       width="100%"
+                       cellpadding="0"
+                       cellspacing="0"
+                       border="0"
+                       style="border-collapse:collapse; border:1px solid #e5e7eb;">
                   <thead>
                     <tr style="background:#f1f5f9;">
-                      <th align="left" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Team</th>
-                      <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">W-L-T</th>
+                      <th align="left"
+                          style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        Team
+                      </th>
+                      <th align="center"
+                          style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        W-L-T
+                      </th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {% for r in standings %}
                     <tr>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.name }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+                        {% if r.logo %}
+                        <img src="{{ r.logo }}"
+                             alt=""
+                             width="28"
+                             height="28"
+                             style="width:28px; height:28px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:8px;">
+                        {% endif %}
+                        <span style="vertical-align:middle;">{{ r.name }}</span>
+                      </td>
+
+                      <td align="center"
+                          style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
+                        {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </td>
                       <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
                         {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
                       </td>
