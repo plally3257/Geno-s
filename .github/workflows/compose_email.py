@@ -229,6 +229,14 @@ def extract_standings(teams):
             "plally3257/Geno-s/main/assets/"
             "Make%20America%27s%20Team%20Great%20Again.png"
         ),
+    championship_markers = {
+        "make america's team great again": "🏆",
+        "highland fc": "🏆",
+        "horsey knights": "🏆🏆",
+        "jobu's rum runners": "🏆🏆*",
+        "time for number seven": "🏆",
+        "steve's super team": "🏆",
+        "sir corgs a lot": "🏆",
     }
     
     rows = []
@@ -1002,15 +1010,6 @@ def compute_power_rankings(scoreboard, teams, standings, current_week):
     """
     if not standings:
         return []
-
-    championship_markers = {
-        "make america's team great again": "🏆",
-        "highland fc": "🏆",
-        "horsey knights": "🏆🏆",
-        "jobu's rum runners": "🏆🏆*",
-        "time for number seven": "🏆",
-        "steve's super team": "🏆",
-        "sir corgs a lot": "🏆",
     }
 
     team_map = {
@@ -1352,7 +1351,9 @@ HTML_TMPL = Template("""<!doctype html>
                              height="28"
                              style="width:28px; height:28px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:8px;">
                         {% endif %}
-                        <span style="vertical-align:middle;">{{ r.name }}</span>
+                        <span style="vertical-align:middle;">
+                            {{ r.name }}{% if r.championship_marker %} {{ r.championship_marker }}{% endif %}
+                        </span>
                       </td>
 
                       <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
@@ -1384,7 +1385,7 @@ HTML_TMPL = Template("""<!doctype html>
                     <tr>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.rank }}</td>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
-                        {{ r.name }}{% if r.championship_marker %} {{ r.championship_marker }}{% endif %}
+                        {{ r.name }}
                       </td>
                       <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.record }}</td>
                       <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.score }}</td>
