@@ -982,6 +982,16 @@ def describe_upcoming_challenge(current_week: int) -> dict | None:
 def compute_power_rankings(standings: list[dict]) -> list[dict]:
     if not standings:
         return []
+    championship_markers = {
+        "make america's team great again": "🏆",
+        "highland fc": "🏆",
+        "horsey knights": "🏆🏆",
+        "jobu's rum runners": "🏆🏆*",
+        "time for number seven": "🏆",
+        "steve's super team": "🏆",
+        "sir corgs a lot": "🏆",
+    }
+    
     rows = []
     for r in standings:
         wins = r.get("wins", 0)
@@ -991,6 +1001,9 @@ def compute_power_rankings(standings: list[dict]) -> list[dict]:
         score = (2 * wins) - losses + (pf - pa) / 100.0
         rows.append({
             "name": r["name"],
+             "championship_marker": championship_markers.get(
+                r["name"].strip().casefold(), ""
+            ),
             "record": f"{wins}-{losses}" + (f"-{r['ties']}" if r.get("ties") else ""),
             "pf": round(pf, 2),
             "pa": round(pa, 2),
@@ -1389,7 +1402,9 @@ HTML_TMPL = Template("""<!doctype html>
                     {% for r in power %}
                     <tr>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.rank }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ r.name }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
+                        {{ r.name }}{% if r.championship_marker %} {{ r.championship_marker }}{% endif %}
+                      </td>
                       <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.record }}</td>
                       <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.pf }}</td>
                       <td align="right" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">{{ r.pa }}</td>
