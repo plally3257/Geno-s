@@ -1,4 +1,4 @@
-import os, requests, datetime, sys, time
+import os, requests, datetime, sys, time, numpy as np
 from jinja2 import Template
 
 # =========================
@@ -979,9 +979,15 @@ def describe_upcoming_challenge(current_week: int) -> dict | None:
 # Power rankings (new)
 # ============================
 
-def compute_power_rankings(standings: list[dict]) -> list[dict]:
+def compute_power_rankings(scoreboard, teams, standings, current_week):
+    """
+    Calculate Massey ratings using completed ESPN matchups through
+    the selected week. Least-squares is used because early-season
+    schedules may not form a fully connected matrix.
+    """
     if not standings:
         return []
+
     championship_markers = {
         "make america's team great again": "🏆",
         "highland fc": "🏆",
@@ -991,27 +997,110 @@ def compute_power_rankings(standings: list[dict]) -> list[dict]:
         "steve's super team": "🏆",
         "sir corgs a lot": "🏆",
     }
-    
+
+    team_map = {
+        t["id"]: _team_display_name(t)
+        for t in (teams or [])
+        if t.get("id") is not None
+    }
+
+    team_ids = sorted(team_map)
+    team_to_idx = {
+        team_id: idx
+        for idx, team_id in enumerate(team_ids)
+    }
+
+    num_teams = len(team_ids)
+    if num_teams == 0:
+        return []
+
+    massey_matrix = np.zeros((num_teams, num_teams))
+    margin_vector = np.zeros(num_teams)
+    completed_games = 0
+
+    for game in scoreboard.get("schedule") or []:
+        matchup_week = int(game.get("matchupPeriodId") or 0)
+        if matchup_week < 1 or matchup_week > int(current_week):
+            continue
+
+        home = game.get("home")
+        away = game.get("away")
+        if not home or not away:
+            continue
+
+        winner = str(game.get("winner") or "UNDECIDED").upper()
+        if winner not in ("HOME", "AWAY", "TIE"):
+            continue
+
+        home_id = home.get("teamId")
+        away_id = away.get("teamId")
+        if home_id not in team_to_idx or away_id not in team_to_idx:
+            continue
+
+        home_idx = team_to_idx[home_id]
+        away_idx = team_to_idx[away_id]
+        margin = float(home.get("totalPoints", 0) or 0) - float(
+            away.get("totalPoints", 0) or 0
+        )
+
+        massey_matrix[home_idx, home_idx] += 1
+        massey_matrix[away_idx, away_idx] += 1
+        massey_matrix[home_idx, away_idx] -= 1
+        massey_matrix[away_idx, home_idx] -= 1
+
+        margin_vector[home_idx] += margin
+        margin_vector[away_idx] -= margin
+        completed_games += 1
+
+    if completed_games == 0:
+        ratings = np.zeros(num_teams)
+    else:
+        constrained_matrix = np.vstack([
+            massey_matrix,
+            np.ones(num_teams),
+        ])
+        constrained_margin = np.append(margin_vector, 0)
+
+        ratings = np.linalg.lstsq(
+            constrained_matrix,
+            constrained_margin,
+            rcond=None,
+        )[0]
+
+    rating_by_name = {
+        team_map[team_id]: float(ratings[idx])
+        for idx, team_id in enumerate(team_ids)
+    }
+
     rows = []
     for r in standings:
+        name = r["name"]
         wins = r.get("wins", 0)
         losses = r.get("losses", 0)
         pf = float(r.get("points_for", 0))
         pa = float(r.get("points_against", 0))
-        score = (2 * wins) - losses + (pf - pa) / 100.0
+
         rows.append({
-            "name": r["name"],
-             "championship_marker": championship_markers.get(
-                r["name"].strip().casefold(), ""
+            "name": name,
+            "championship_marker": championship_markers.get(
+                name.strip().casefold(), ""
             ),
-            "record": f"{wins}-{losses}" + (f"-{r['ties']}" if r.get("ties") else ""),
+            "record": f"{wins}-{losses}" + (
+                f"-{r['ties']}" if r.get("ties") else ""
+            ),
             "pf": round(pf, 2),
             "pa": round(pa, 2),
-            "score": round(score, 3),
+            "score": round(rating_by_name.get(name, 0), 2),
         })
-    rows.sort(key=lambda x: (x["score"], x["pf"]), reverse=True)
-    for i, r in enumerate(rows, start=1):
-        r["rank"] = i
+
+    rows.sort(
+        key=lambda row: (row["score"], row["pf"]),
+        reverse=True,
+    )
+
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+
     return rows
 
 # =========================================
@@ -1395,7 +1484,7 @@ HTML_TMPL = Template("""<!doctype html>
                       <th align="center" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Record</th>
                       <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">PF</th>
                       <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">PA</th>
-                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Score</th>
+                      <th align="right" style="padding:8px 10px; font-size:12px; color:#334155; border-bottom:1px solid #e5e7eb;">Massey</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1413,7 +1502,9 @@ HTML_TMPL = Template("""<!doctype html>
                     {% endfor %}
                   </tbody>
                 </table>
-                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">Score = 2×Wins − Losses + (PF − PA)/100</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                    Massey rating based on scoring margins and opponent strength through Week {{ week }}. Ratings are centered around zero; higher is better.
+                </div>
               </td>
             </tr>
             {% endif %}
@@ -1505,7 +1596,12 @@ def main():
     week_rows = build_week_stats_from_boxscore(boxscore, teams, week)
 
     challenge = compute_week_challenge(week, matchups, standings, week_rows)
-    power = compute_power_rankings(standings)
+        power = compute_power_rankings(
+        scoreboard,
+        teams,
+        standings,
+        week,
+    )
     next_challenge = describe_upcoming_challenge(week)
     weekly_challenges = build_weekly_challenges(season, week)
     waiver = compute_waiver_order(teams, standings)
