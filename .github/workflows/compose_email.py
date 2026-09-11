@@ -1568,7 +1568,7 @@ HTML_TMPL = Template("""<!doctype html>
                     {% endfor %}
                   </tbody>
                 </table>
-                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">If your league uses rolling waivers or FAAB, this reflects the current priority. Otherwise it’s the inverse of standings.</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">Inverse of Standings</div>
               </td>
             </tr>
             {% endif %}
