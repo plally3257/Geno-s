@@ -1601,7 +1601,8 @@ def main():
         standings,
         week_rows,
     )
-
+    next_challenge = describe_upcoming_challenge(week)
+    
     power = compute_power_rankings(
         scoreboard,
         teams,
