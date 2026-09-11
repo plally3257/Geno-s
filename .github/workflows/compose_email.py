@@ -1499,7 +1499,7 @@ def main():
         logo_url=LOGO_URL,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-   subject = f"Fantasy {season} Week {week} Results & Notes"
+    subject = f"Fantasy {season} Week {week} Results & Notes"
 
     os.makedirs("out", exist_ok=True)
     with open("out/body.html", "w", encoding="utf-8") as f:
