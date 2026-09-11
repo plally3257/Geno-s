@@ -1359,15 +1359,6 @@ HTML_TMPL = Template("""<!doctype html>
                         <span style="vertical-align:middle;">{{ r.name }}</span>
                       </td>
 
-                      <td align="center"
-                          style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
-                        {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
-                      </td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </td>
                       <td align="center" style="padding:8px 10px; font-size:13px; color:#334155; border-bottom:1px solid #e5e7eb;">
                         {{ r.wins }}-{{ r.losses }}{% if r.ties %}-{{ r.ties }}{% endif %}
                       </td>
