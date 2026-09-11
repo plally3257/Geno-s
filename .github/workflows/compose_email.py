@@ -1653,7 +1653,7 @@ def main():
         logo_url=LOGO_URL,
         now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
-    subject = "Geno's Weekly"
+    subject = f"Geno's Weekly — Week {week}"
 
     os.makedirs("out", exist_ok=True)
     with open("out/body.html", "w", encoding="utf-8") as f:
