@@ -219,6 +219,13 @@ def extract_standings(teams):
             return float(stat0)
         return 0.0
 
+    logo_overrides = {
+        "unemployed clowns": (
+            "https://raw.githubusercontent.com/"
+            "plally3257/Geno-s/main/assets/unemployed-clowns.png"
+        ),
+    }
+    
     rows = []
     for t in (teams or []):
         name = _team_display_name(t)
@@ -226,7 +233,10 @@ def extract_standings(teams):
         pf = round(get_points_for(t), 2)
         rows.append({
             "name": name,
-            "logo": t.get("logo"),
+            "logo": logo_overrides.get(
+                name.strip().casefold(),
+                t.get("logo"),
+            ),
             "wins": wins,
             "losses": losses,
             "ties": ties,
