@@ -1595,14 +1595,20 @@ def main():
     standings = extract_standings(teams)
     week_rows = build_week_stats_from_boxscore(boxscore, teams, week)
 
-    challenge = compute_week_challenge(week, matchups, standings, week_rows)
-        power = compute_power_rankings(
+    challenge = compute_week_challenge(
+        week,
+        matchups,
+        standings,
+        week_rows,
+    )
+
+    power = compute_power_rankings(
         scoreboard,
         teams,
         standings,
         week,
     )
-    next_challenge = describe_upcoming_challenge(week)
+
     weekly_challenges = build_weekly_challenges(season, week)
     waiver = compute_waiver_order(teams, standings)
 
