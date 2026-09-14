@@ -249,8 +249,7 @@ def extract_standings(teams):
         rows.append({
             "name": name,
             "championship_marker": championship_markers.get(
-                name.strip().casefold(),
-                "",
+                " ".join(name.split()).casefold(),
             ),
             "logo": logo_overrides.get(
                 name.strip().casefold(),
