@@ -852,7 +852,7 @@ def compute_week_challenge(week: int, matchups, standings, week_rows):
                 best_team = r["team"]
         if best_team is None:
             return None
-        return ("Highest combined starting RB points", best_team, f"{round(best_sum, 2)} pts")
+        return ("Highest combined starting RB points (includ. FLEX)", best_team, f"{round(best_sum, 2)} pts")
 
     def team_closest_to_projected_total():
         if not week_rows:
