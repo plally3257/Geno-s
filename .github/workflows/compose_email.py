@@ -852,7 +852,7 @@ def compute_week_challenge(week: int, matchups, standings, week_rows):
                 best_team = r["team"]
         if best_team is None:
             return None
-        return ("Highest combined starting RB points (includ. FLEX)", best_team, f"{round(best_sum, 2)} pts")
+        return ("Highest combined starting RB points (FLEX incl.)", best_team, f"{round(best_sum, 2)} pts")
 
     def team_closest_to_projected_total():
         if not week_rows:
@@ -1700,7 +1700,7 @@ HTML_TMPL = Template("""<!doctype html>
                     {% for row in weekly_challenges %}
                     <tr>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">W{{ row.week }}</td>
-                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ (' ' ~ (row.title|title) ~ ' ')|replace(' Qb ', ' QB ')|replace(' Rb ', ' RB ')|replace(' Te ', ' TE ')|replace(' Wr ', ' WR ')|replace(' D/St ', ' D/ST ')|trim }}</td>
+                      <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">{{ (' ' ~ (row.title|title) ~ ' ')|replace(' Qb ', ' QB ')|replace(' Rb ', ' RB ')|replace(' Te ', ' TE ')|replace(' Wr ', ' WR ')|replace(' D/St ', ' D/ST ')|replace('(Flex Incl.)', '(FLEX incl.)')|trim }}</td>
                       <td style="padding:8px 10px; font-size:13px; color:#0f172a; border-bottom:1px solid #e5e7eb;">
                         <strong>{{ row.winner }}</strong>
                         {% if row.detail %}<div style="font-size:12px; color:#64748b; margin-top:2px;">{{ row.detail }}</div>{% endif %}
