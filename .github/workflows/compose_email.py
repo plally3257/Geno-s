@@ -1228,11 +1228,13 @@ HTML_TMPL = Template("""<!doctype html>
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px; max-width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
 
 <tr>
-  <td style="background:#0f172a; color:#ffffff; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
+  <td bgcolor="#0f172a" style="background-color:#0f172a !important; color:#ffffff !important; padding:18px 28px; font-family:Arial, Helvetica, sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
         <td align="left" valign="middle" style="padding-right:12px;">
-          <div style="font-size:22px; line-height:1.2; font-weight:700; letter-spacing:.3px;">Geno's Weekly</div>
+          <div style="font-size:22px; line-height:1.2; font-weight:700; letter-spacing:.3px; color:#ffffff !important;">
+              Geno's Weekly
+          </div>
         </td>
         <td align="right" valign="middle" width="120" style="width:120px;">
           {% if logo_url %}
