@@ -1168,49 +1168,184 @@ def build_narrative(matchups, week, week_rows=None):
 
     closest = min(matchups, key=lambda m: m["abs_margin"])
     blowout = max(matchups, key=lambda m: m["abs_margin"])
-    lowest_pair = min(matchups, key=lambda m: min(m["home_pts"], m["away_pts"]))
-    loser_team = lowest_pair["home"] if lowest_pair["home_pts"] < lowest_pair["away_pts"] else lowest_pair["away"]
-    loser_score = min(lowest_pair["home_pts"], lowest_pair["away_pts"])
+    lowest_pair = min(
+        matchups,
+        key=lambda m: min(m["home_pts"], m["away_pts"])
+    )
 
+    loser_team = (
+        lowest_pair["home"]
+        if lowest_pair["home_pts"] < lowest_pair["away_pts"]
+        else lowest_pair["away"]
+    )
+    loser_score = min(
+        lowest_pair["home_pts"],
+        lowest_pair["away_pts"]
+    )
+
+    idx = (int(week) - 1) % 6
     lines = []
-    lines.append(f"Week {week} is in the books!")
-    lines.append(
-        f" The closest battle was between {closest['away']} and {closest['home']}, "
-        f"decided by just {closest['abs_margin']} points."
-    )
-    lines.append(
-        f" Meanwhile, {blowout['home']} vs {blowout['away']} was a blowout "
-        f"with a margin of {blowout['abs_margin']}."
-    )
 
-    idx = (int(week) - 1) % 3
-    if isinstance(week_rows, list) and week_rows:
-        underperf = []
-        for r in week_rows:
-            proj = r.get("proj")
-            pts = r.get("pts", 0)
-            if isinstance(proj, (int, float)) and (proj - pts) >= 20:
-                underperf.append({
-                    "team": r["team"],
-                    "proj": float(proj),
-                    "pts": float(pts),
-                    "delta": round(float(proj - pts), 2),
-                })
-        if underperf:
-            worst = max(underperf, key=lambda x: x["delta"])
-            u_msgs = [
-                f"{worst['team']} missed the memo: projected {worst['proj']:.1f}, delivered {worst['pts']:.1f} (−{worst['delta']:.1f}).",
-                f"{worst['team']} got humbled—{worst['proj']:.1f} projected, only {worst['pts']:.1f}. That’s a {worst['delta']:.1f}-point faceplant.",
-                f"Vegas had {worst['team']} at {worst['proj']:.1f}; reality said {worst['pts']:.1f}. {worst['delta']:.1f} under. Yikes.",
-            ]
-            lines.append(" " + u_msgs[idx])
-
-    l_msgs = [
-        f"And bringing up the rear, {loser_team} with just {loser_score:.1f}. Someone check their Wi-Fi.",
-        f"Weekly floor goes to {loser_team}: {loser_score:.1f} points. Bench might sue for playing time.",
-        f"{loser_team} posted {loser_score:.1f}. The kicker’s carpool scored more.",
+    opening_msgs = [
+        f"Week {week} is officially in the books, and the fantasy gods have reviewed the evidence.",
+        f"Week {week} left receipts—some impressive, some deeply unfortunate.",
+        f"Another week of lineup decisions, questionable projections, and emotional damage is complete.",
+        f"The dust has settled on Week {week}, and not everyone escaped with their dignity intact.",
+        f"Week {week} delivered the usual mix of brilliance, bad luck, and players going off on the bench.",
+        f"That’s a wrap on Week {week}. Let’s examine the damage.",
     ]
-    lines.append(" " + l_msgs[idx])
+    lines.append(opening_msgs[idx])
+
+    closest_msgs = [
+        (
+            f"{closest['away']} and {closest['home']} produced the week’s "
+            f"closest matchup, separated by only {closest['abs_margin']:.1f} points."
+        ),
+        (
+            f"Every decimal mattered between {closest['away']} and "
+            f"{closest['home']}, with just {closest['abs_margin']:.1f} points "
+            f"deciding it."
+        ),
+        (
+            f"The matchup between {closest['away']} and {closest['home']} "
+            f"came down to the wire—a margin of only "
+            f"{closest['abs_margin']:.1f}."
+        ),
+        (
+            f"{closest['away']} and {closest['home']} were one stat correction "
+            f"away from chaos, finishing only {closest['abs_margin']:.1f} "
+            f"points apart."
+        ),
+        (
+            f"The week’s nail-biter belonged to {closest['away']} and "
+            f"{closest['home']}, decided by {closest['abs_margin']:.1f} points."
+        ),
+        (
+            f"No matchup was tighter than {closest['away']} versus "
+            f"{closest['home']}, where the final difference was just "
+            f"{closest['abs_margin']:.1f}."
+        ),
+    ]
+    lines.append(closest_msgs[idx])
+
+    blowout_msgs = [
+        (
+            f"At the other end of the spectrum, {blowout['home']} versus "
+            f"{blowout['away']} ended with a {blowout['abs_margin']:.1f}-point "
+            f"gap. Competitive balance took the week off."
+        ),
+        (
+            f"{blowout['home']} and {blowout['away']} supplied the week’s "
+            f"largest margin at {blowout['abs_margin']:.1f} points. "
+            f"The mercy-rule committee has been notified."
+        ),
+        (
+            f"The matchup between {blowout['home']} and {blowout['away']} "
+            f"was settled by {blowout['abs_margin']:.1f} points—and was "
+            f"probably settled well before Monday night."
+        ),
+        (
+            f"{blowout['home']} versus {blowout['away']} turned into the "
+            f"week’s runaway result, with a margin of "
+            f"{blowout['abs_margin']:.1f}."
+        ),
+        (
+            f"The widest gap belonged to {blowout['home']} and "
+            f"{blowout['away']}: {blowout['abs_margin']:.1f} points and "
+            f"very little suspense."
+        ),
+        (
+            f"{blowout['home']} and {blowout['away']} finished "
+            f"{blowout['abs_margin']:.1f} points apart. One side had fun."
+        ),
+    ]
+    lines.append(blowout_msgs[idx])
+
+    if isinstance(week_rows, list) and week_rows:
+        underperformers = []
+
+        for row in week_rows:
+            projected = row.get("proj")
+            points = row.get("pts", 0)
+
+            if (
+                isinstance(projected, (int, float))
+                and (projected - points) >= 20
+            ):
+                underperformers.append({
+                    "team": row["team"],
+                    "proj": float(projected),
+                    "pts": float(points),
+                    "delta": round(
+                        float(projected - points),
+                        2,
+                    ),
+                })
+
+        if underperformers:
+            worst = max(
+                underperformers,
+                key=lambda team: team["delta"],
+            )
+
+            underperformance_msgs = [
+                (
+                    f"{worst['team']} was projected for "
+                    f"{worst['proj']:.1f} but delivered only "
+                    f"{worst['pts']:.1f}—a {worst['delta']:.1f}-point miss."
+                ),
+                (
+                    f"The projections believed in {worst['team']}. Reality "
+                    f"did not: {worst['pts']:.1f} against an expected "
+                    f"{worst['proj']:.1f}."
+                ),
+                (
+                    f"{worst['team']} fell {worst['delta']:.1f} points short "
+                    f"of projection. The computers would like a do-over."
+                ),
+                (
+                    f"The week’s biggest projection miss belonged to "
+                    f"{worst['team']}: expected {worst['proj']:.1f}, scored "
+                    f"{worst['pts']:.1f}."
+                ),
+                (
+                    f"{worst['team']}'s {worst['proj']:.1f}-point projection "
+                    f"aged poorly after a {worst['pts']:.1f}-point finish."
+                ),
+                (
+                    f"{worst['team']} undercut its projection by "
+                    f"{worst['delta']:.1f} points. Analytics can be cruel."
+                ),
+            ]
+            lines.append(underperformance_msgs[idx])
+
+    low_score_msgs = [
+        (
+            f"Bringing up the rear was {loser_team} with "
+            f"{loser_score:.1f} points. Someone check the lineup settings."
+        ),
+        (
+            f"The weekly scoring floor belongs to {loser_team}: "
+            f"{loser_score:.1f} points. The bench is requesting an inquiry."
+        ),
+        (
+            f"{loser_team} posted the week’s lowest total at "
+            f"{loser_score:.1f}. Offensive coordinator interviews begin Tuesday."
+        ),
+        (
+            f"At {loser_score:.1f} points, {loser_team} secured the kind of "
+            f"weekly distinction nobody wants."
+        ),
+        (
+            f"{loser_team} finished with a league-low "
+            f"{loser_score:.1f} points. Thoughts and prayers to the roster."
+        ),
+        (
+            f"The basement this week belongs to {loser_team}, whose "
+            f"{loser_score:.1f} points left plenty of room for improvement."
+        ),
+    ]
+    lines.append(low_score_msgs[idx])
 
     return " ".join(lines)
 
