@@ -732,7 +732,7 @@ def compute_week_challenge(week: int, matchups, standings, week_rows):
         if not all_rows:
             return None
         row = max(all_rows, key=lambda r: r["pts"])
-        return ("Highest scoring team", row["team"], f"{row['pts']} pts")
+        return ("Highest Scoring Team", row["team"], f"{row['pts']} pts")
 
     def team_with_highest_scoring_player_starters_incl_dst():
         if not week_rows:
@@ -748,17 +748,25 @@ def compute_week_challenge(week: int, matchups, standings, week_rows):
         return ("Highest scoring player (starter, D/ST incl.)", best["team"], f"{best['player']} — {best['points']} pts")
 
     def team_with_highest_scoring_bench_player():
-        if not week_rows:
-            return None
-        worst = None
-        for r in week_rows:
-            for p in (r.get("bench") or []):
-                pts = p.get("points", 0)
-                if worst is None or pts < worst["points"]:
-                    worst = {"team": r["team"], "player": p.get("name", "Player"), "points": pts}
-        if not worst:
-            return None
-        return ("Highest scoring bench player", worst["team"], f"{worst['player']} — {worst['points']} pts")
+    if not week_rows:
+        return None
+    best = None
+    for r in week_rows:
+        for p in (r.get("bench") or []):
+            pts = p.get("points", 0)
+            if best is None or pts > best["points"]:
+                best = {
+                    "team": r["team"],
+                    "player": p.get("name", "Player"),
+                    "points": pts,
+                }
+    if best is None:
+        return None
+    return (
+        "Highest Scoring Bench Player",
+        best["team"],
+        f"{best['player']} — {best['points']} pts",
+    )
 
     def smallest_margin_of_victory():
         winners = [m for m in matchups if m["winner"] in ("home", "away")]
