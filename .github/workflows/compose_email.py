@@ -747,7 +747,7 @@ def compute_week_challenge(week: int, matchups, standings, week_rows):
             return None
         return ("Highest scoring player (starter, D/ST incl.)", best["team"], f"{best['player']} — {best['points']} pts")
 
-        def team_with_highest_scoring_bench_player():
+    def team_with_highest_scoring_bench_player():
             if not week_rows:
                 return None
 
