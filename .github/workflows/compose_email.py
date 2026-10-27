@@ -804,7 +804,7 @@ def compute_week_challenge(week: int, matchups, standings, week_rows):
         best = None
         for r in week_rows:
             for p in (r.get("starters") or []):
-                if p.get("posId") == POS_QB:
+                if p.get("slotId") == POS_QB:
                     pts = p.get("points", 0)
                     if best is None or pts > best["points"]:
                         best = {"team": r["team"], "player": p.get("name", "QB"), "points": pts}
